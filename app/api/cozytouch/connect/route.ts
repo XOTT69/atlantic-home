@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     stage = "atlantic_auth";
     const form = new URLSearchParams({
       grant_type: "password",
-      scope: "openid",
+      scope: "openid device_" + Math.floor(Date.now() / 1000),
       username: "GA-PRIVATEPERSON/" + email,
       password
     });
