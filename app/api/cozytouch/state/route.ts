@@ -1,110 +1,73 @@
 import { NextResponse } from "next/server";
-import { getCozytouchSession } from "@/lib/session";
+import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates } from "@/lib/overkiz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const API = "https://apis.groupe-atlantic.com";
-const OVERKIZ = "https://ha110-1.overkiz.com/enduser-mobile-web/enduserAPI";
-
 export async function GET() {
   try {
-    const session = await getCozytouchSession();
-    if (!session.accessToken || !session.expiresAt || Date.now() >= session.expiresAt) {
-      session.destroy();
-      return NextResponse.json({ connected: false, error: "Сесія Cozytouch завершилася. Підключи акаунт знову." }, { status: 401 });
-    }
-
-    // This Atlantic account returns an empty Magellan device collection.
-    // Use the legacy Cozytouch setup endpoint that was verified for this account.
-    const jwtResponse = await fetch(API + "/magellan/accounts/jwt", {
-      headers: { Authorization: "Bearer " + session.accessToken },
-      cache: "no-store",
-      signal: AbortSignal.timeout(12000)
+    return await withOverkiz(async (cookie, setup) => {
+      const devices = Array.isArray(setup.devices) ? setup.devices as Record<string, unknown>[] : [];
+      const heater = findAtlanticHeater(setup);
+      const sensors = devices.filter(device =>
+        String(device.controllableName ?? "").includes("TemperatureInCelcius") ||
+        String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption")
+      );
+      const targets = [heater, ...sensors].filter(device => typeof device.deviceURL === "string");
+      const readings = await Promise.all(targets.map(async device => {
+        try {
+          const raw = await getDeviceStates(cookie, String(device.deviceURL));
+          return { deviceURL: device.deviceURL, states: normalizeStates(raw), raw };
+        } catch {
+          return { deviceURL: device.deviceURL, states: {}, raw: [] };
+        }
+      }));
+      const stateByUrl = new Map(readings.map(item => [item.deviceURL, item]));
+      const heaterReading = stateByUrl.get(heater.deviceURL);
+      const temperatureSensor = sensors.find(device => String(device.controllableName ?? "").includes("TemperatureInCelcius"));
+      const energySensor = sensors.find(device => String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption"));
+      const sensorValue = (url: unknown, key: string) => {
+        if (!url) return null;
+        const value = stateByUrl.get(url)?.states?.[key];
+        return value === undefined ? null : value;
+      };
+      return NextResponse.json({
+        connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(),
+        heater: {
+          id: heater.deviceURL, name: heater.label ?? "Atlantic Altis Eco Boost",
+          modelId: heater.controllableName ?? null, isAvailable: heater.available ?? null,
+          enabled: heater.enabled ?? null, states: heaterReading?.states ?? {},
+          rawStates: heaterReading?.raw ?? [], supportedCommands: heater.definition?.commands ?? [],
+          supportedStates: heater.definition?.states ?? []
+        },
+        telemetry: {
+          roomTemperature: sensorValue(temperatureSensor?.deviceURL, "Temperature"),
+          energyConsumption: sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption"),
+          energyTariffs: energySensor ? Object.fromEntries(
+            Object.entries(stateByUrl.get(energySensor.deviceURL)?.states ?? {}).filter(([key]) => key.startsWith("ConsumptionTariff"))
+          ) : {}
+        },
+        gateway: (Array.isArray(setup.gateways) ? setup.gateways as Record<string, unknown>[] : []).map(gateway => ({
+          gatewayId: gateway.gatewayId ?? null, alive: gateway.alive ?? null,
+          connectivity: gateway.connectivity ?? null, mode: gateway.mode ?? null
+        })),
+        devices: devices.map(device => ({
+          id: device.deviceURL ?? device.oid ?? null, name: device.label ?? device.controllableName ?? "Atlantic",
+          modelId: device.controllableName ?? null, productId: null, modelFamily: device.uiClass ?? null,
+          isAvailable: device.available ?? null, enabled: device.enabled ?? null,
+          deviceURL: device.deviceURL ?? null, oid: device.oid ?? null, type: device.type ?? null,
+          controllableName: device.controllableName ?? null, definition: device.definition ?? null,
+          widget: device.widget ?? null, capabilities: []
+        }))
+      });
     });
-    if (!jwtResponse.ok) {
-      return NextResponse.json({ connected: true, error: "Atlantic не видав токен доступу до списку пристроїв." }, { status: 502 });
-    }
-    const jwtText = await jwtResponse.text();
-    const jwt = jwtText.trim().replace(/^"|"$/g, "");
-    if (!jwt || jwt.length < 20) {
-      return NextResponse.json({ connected: true, error: "Atlantic повернув некоректний токен Cozytouch." }, { status: 502 });
-    }
-
-    const loginResponse = await fetch(OVERKIZ + "/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ jwt }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(12000)
-    });
-    if (!loginResponse.ok) {
-      return NextResponse.json({ connected: true, error: "Не вдалося відкрити сесію пристроїв Cozytouch." }, { status: 502 });
-    }
-    const cookieParts = typeof loginResponse.headers.getSetCookie === "function"
-      ? loginResponse.headers.getSetCookie()
-      : [loginResponse.headers.get("set-cookie") ?? ""];
-    const cookie = cookieParts.map(part => part.split(";")[0]).filter(Boolean).join("; ");
-    if (!cookie) {
-      return NextResponse.json({ connected: true, error: "Cozytouch не повернув сесійну cookie." }, { status: 502 });
-    }
-
-    const setupResponse = await fetch(OVERKIZ + "/setup", {
-      headers: { Cookie: cookie, "Cache-Control": "no-cache" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(12000)
-    });
-    if (!setupResponse.ok) {
-      return NextResponse.json({ connected: true, error: "Не вдалося зчитати конфігурацію пристроїв Cozytouch." }, { status: 502 });
-    }
-    const setup = await setupResponse.json();
-    const devices = setup && typeof setup === "object" && Array.isArray(setup.devices) ? setup.devices : [];
-
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "UNKNOWN";
+    const expired = code === "COZYTOUCH_SESSION_EXPIRED";
     return NextResponse.json({
-      connected: true,
-      source: "cozytouch-legacy",
-      updatedAt: new Date().toISOString(),
-      gatewayCount: Array.isArray(setup.gateways) ? setup.gateways.length : 0,
-      devices: devices.map((device: Record<string, unknown>) => ({
-        id: String(device.deviceURL ?? device.oid ?? ""),
-        name: String(device.label ?? device.controllableName ?? "Atlantic"),
-        modelId: device.controllableName ?? null,
-        productId: null,
-        modelFamily: device.uiClass ?? null,
-        isAvailable: device.available ?? null,
-        enabled: device.enabled ?? null,
-        deviceURL: device.deviceURL ?? null,
-        oid: device.oid ?? null,
-        type: device.type ?? null,
-        controllableName: device.controllableName ?? null,
-        placeOID: device.placeOID ?? null,
-        shortcut: device.shortcut ?? null,
-        // Cozytouch definitions/widgets are descriptive metadata, not credentials.
-        // Expose them read-only so we can identify the real thermostat endpoint
-        // and its supported states/commands before implementing any controls.
-        definition: device.definition ?? null,
-        widget: device.widget ?? null,
-        capabilities: []
-      })),
-      zones: Array.isArray(setup.zones) ? setup.zones.map((zone: Record<string, unknown>) => ({
-        name: zone.name ?? zone.label ?? null,
-        oid: zone.oid ?? null,
-        placeOID: zone.placeOID ?? null,
-        type: zone.type ?? null,
-        keys: Object.keys(zone)
-      })) : [],
-      gateways: Array.isArray(setup.gateways) ? setup.gateways.map((gateway: Record<string, unknown>) => ({
-        gatewayId: gateway.gatewayId ?? null,
-        type: gateway.type ?? null,
-        subType: gateway.subType ?? null,
-        placeOID: gateway.placeOID ?? null,
-        alive: gateway.alive ?? null,
-        connectivity: gateway.connectivity ?? null,
-        mode: gateway.mode ?? null,
-        functions: gateway.functions ?? null
-      })) : []
-    });
-  } catch {
-    return NextResponse.json({ error: "Не вдалося отримати стан пристроїв Cozytouch." }, { status: 500 });
+      connected: false,
+      error: expired ? "Сесія Cozytouch завершилася. Підключи акаунт знову." : "Не вдалося зчитати стан конвектора Cozytouch.",
+      code
+    }, { status: expired ? 401 : 502 });
   }
 }
