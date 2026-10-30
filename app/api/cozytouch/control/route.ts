@@ -47,7 +47,12 @@ export async function POST(request: Request) {
 
     const result = await withOverkiz(async (cookie, setup) => {
       const gateways = Array.isArray(setup.gateways) ? setup.gateways as Record<string, unknown>[] : [];
-      const gatewayOnline = gateways.some(gateway => gateway.alive === true && String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "").toUpperCase() !== "DISCONNECTED");
+      const gatewayOnline = gateways.some(gateway => {
+        const connectivity = typeof gateway.connectivity === "string"
+          ? gateway.connectivity
+          : String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "");
+        return gateway.alive === true && connectivity.toUpperCase() !== "DISCONNECTED";
+      });
       if (!gatewayOnline) throw new Error("GATEWAY_OFFLINE");
       const heater = findAtlanticHeater(setup);
       const exec = await executeHeaterCommand(cookie, heater, command, parameters);
