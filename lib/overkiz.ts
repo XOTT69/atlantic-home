@@ -116,3 +116,43 @@ export async function executeHeaterCommand(
   if (!response.ok) throw new Error("OVERKIZ_COMMAND_FAILED");
   return body as Record<string, unknown>;
 }
+
+
+export async function getDailySetupConsumption() {
+  const session = await getCozytouchSession();
+  if (!session.accessToken || !session.expiresAt || Date.now() >= session.expiresAt) {
+    throw new Error("COZYTOUCH_SESSION_EXPIRED");
+  }
+  const headers = { Authorization: "Bearer " + session.accessToken, "Content-Type": "application/json" };
+  const setupResponse = await fetch(ATLANTIC_API + "/magellan/cozytouch/setupviewv2", {
+    headers, cache: "no-store", signal: AbortSignal.timeout(15000)
+  });
+  if (!setupResponse.ok) throw new Error("ATLANTIC_SETUP_VIEW_FAILED");
+  const setupBody = await setupResponse.json() as unknown;
+  const setup = Array.isArray(setupBody) ? setupBody[0] as Record<string, unknown> | undefined : setupBody as Record<string, unknown>;
+  const setupId = setup?.id;
+  if (setupId === undefined || setupId === null) throw new Error("ATLANTIC_SETUP_ID_MISSING");
+
+  const response = await fetch(ATLANTIC_API + "/magellan/setups/" + encodeURIComponent(String(setupId)) + "/consumptions?periodicity=daily", {
+    headers, cache: "no-store", signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) throw new Error("ATLANTIC_CONSUMPTION_FAILED");
+  const payload = await response.json() as unknown;
+  if (!Array.isArray(payload)) throw new Error("ATLANTIC_CONSUMPTION_INVALID");
+
+  const series = payload.filter((item): item is Record<string, unknown> =>
+    !!item && typeof item === "object" && item.type === 1 && item.unit === 1 && Array.isArray(item.consumptionPeriods)
+  );
+  const periods = series.flatMap(item => (item.consumptionPeriods as Record<string, unknown>[]).filter(period => Number.isInteger(period.date)));
+  if (!periods.length) return { available: false, totalKwh: null, peakKwh: null, offPeakKwh: null, date: null, source: "Atlantic daily consumption" };
+  const latestDate = Math.max(...periods.map(period => Number(period.date)));
+  const today = periods.filter(period => Number(period.date) === latestDate);
+  const sum = (mode?: number) => Number(today.filter(period => mode === undefined || Number(period.mode ?? 0) === mode)
+    .reduce((total, period) => total + (typeof period.consumedQuantity === "number" ? period.consumedQuantity : 0), 0).toFixed(3));
+  const hasTariffs = today.some(period => Number(period.mode ?? 0) === 1) && today.some(period => Number(period.mode ?? 0) === 2);
+  return {
+    available: true, totalKwh: sum(), peakKwh: hasTariffs ? sum(1) : null,
+    offPeakKwh: hasTariffs ? sum(2) : null, date: new Date(latestDate * 1000).toISOString(),
+    source: "Atlantic daily consumption", scope: "setup"
+  };
+}
