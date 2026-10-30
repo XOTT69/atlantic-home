@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -32,7 +32,7 @@ export default function HomePage() {
   const [liveDevice, setLiveDevice] = useState<{name:string; modelId:string|null; isAvailable:boolean|null} | null>(null);
   const [liveLoading, setLiveLoading] = useState(true);
   const [connectionRecovered, setConnectionRecovered] = useState(false);
-  const [gatewayWasOffline, setGatewayWasOffline] = useState(false);
+  const gatewayWasOffline = useRef(false);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -49,8 +49,8 @@ export default function HomePage() {
         const states = heater?.states ?? {};
         setHeaterStates(states);
         const currentGatewayOnline = data?.gatewayOnline === true;
-        if (currentGatewayOnline && gatewayWasOffline) setConnectionRecovered(true);
-        if (!currentGatewayOnline) setGatewayWasOffline(true);
+        if (currentGatewayOnline && gatewayWasOffline.current) setConnectionRecovered(true);
+        if (!currentGatewayOnline) gatewayWasOffline.current = true;
         setGatewayOnline(currentGatewayOnline);
         setDeviceLastSuccessAt(data?.deviceLastSuccessAt ?? null);
         setRoomTemperatureStatus(data?.telemetry?.roomTemperatureStatus === "online" ? "online" : "unknown");
@@ -75,7 +75,7 @@ export default function HomePage() {
         });
         setControlError("");
       } catch {
-        if (active) { setLiveDevice(null); setDeviceStatus("unknown"); setGatewayOnline(false); }
+        if (active) { gatewayWasOffline.current = true; setLiveDevice(null); setDeviceStatus("unknown"); setGatewayOnline(false); }
       } finally {
         if (active) setLiveLoading(false);
       }
