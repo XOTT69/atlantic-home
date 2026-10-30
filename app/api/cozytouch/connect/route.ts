@@ -107,7 +107,18 @@ export async function POST(request: Request) {
       topLevelType: Array.isArray(setup) ? "array" : setup === null ? "null" : typeof setup,
       topLevelKeys: setup && typeof setup === "object" && !Array.isArray(setup) ? Object.keys(setup as Record<string, unknown>).slice(0, 30) : [],
       accountCount: setupAccounts.length,
-      accounts: accountDiagnostics
+      accounts: accountDiagnostics,
+      relatedCollections: setupAccounts.map((item: unknown) => {
+        const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
+        const describe = (value: unknown) => ({
+          type: Array.isArray(value) ? "array" : typeof value,
+          count: Array.isArray(value) ? value.length : null,
+          firstItemKeys: Array.isArray(value) && value[0] && typeof value[0] === "object"
+            ? Object.keys(value[0] as Record<string, unknown>).slice(0, 30)
+            : []
+        });
+        return { gateways: describe(account.gateways), zones: describe(account.zones) };
+      })
     };
     if (!devices.length) {
       console.error("[cozytouch] no devices in setup response", setupDiagnostics);
