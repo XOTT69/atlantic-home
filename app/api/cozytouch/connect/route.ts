@@ -1,3 +1,4 @@
+import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { getCozytouchSession } from "@/lib/session";
 
@@ -14,6 +15,7 @@ function browserResult(title: string, message: string, success = false) {
 }
 
 export async function POST(request: Request) {
+  if (!(await hasAppAccess())) return NextResponse.json({ error: "Потрібен пароль доступу до Atlantic Home." }, { status: 401 });
   let stage = "request";
   const wantsHtml = !(request.headers.get("content-type") ?? "").includes("application/json");
   const origin = request.headers.get("origin");
