@@ -31,6 +31,8 @@ export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [liveDevice, setLiveDevice] = useState<{name:string; modelId:string|null; isAvailable:boolean|null} | null>(null);
   const [liveLoading, setLiveLoading] = useState(true);
+  const [connectionRecovered, setConnectionRecovered] = useState(false);
+  const [gatewayWasOffline, setGatewayWasOffline] = useState(false);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -46,7 +48,10 @@ export default function HomePage() {
         const heater = data?.heater;
         const states = heater?.states ?? {};
         setHeaterStates(states);
-        setGatewayOnline(data?.gatewayOnline === true);
+        const currentGatewayOnline = data?.gatewayOnline === true;
+        if (currentGatewayOnline && gatewayWasOffline) setConnectionRecovered(true);
+        if (!currentGatewayOnline) setGatewayWasOffline(true);
+        setGatewayOnline(currentGatewayOnline);
         setDeviceLastSuccessAt(data?.deviceLastSuccessAt ?? null);
         setRoomTemperatureStatus(data?.telemetry?.roomTemperatureStatus === "online" ? "online" : "unknown");
         setRoomTemperatureLastSuccessAt(data?.telemetry?.roomTemperatureLastSuccessAt ?? null);
@@ -135,6 +140,8 @@ export default function HomePage() {
             <div className="weather-mark"><Thermometer size={19}/><span>Кімната</span></div>
           </div>
 
+          {connectionRecovered && <div className="tip-card"><div className="tip-icon"><Wifi size={20}/></div><div><strong>Зв’язок із Cozytouch відновлено</strong><p>Шлюз знову відповідає. Перевір актуальний стан конвектора та цільову температуру.</p></div><button className="more-button" onClick={()=>setConnectionRecovered(false)} aria-label="Закрити">×</button></div>}
+          {!gatewayOnline && !liveLoading && <div className="tip-card"><div className="tip-icon"><Wifi size={20}/></div><div><strong>Шлюз Cozytouch недоступний</strong><p>Можливе знеструмлення або втрата інтернету. Стан конвектора поки не підтверджено. Після відновлення зв’язку перевіримо його автоматично.</p></div></div>}
           <div className="device-card">
             <div className="device-head">
               <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>{liveDevice?.name ?? "Atlantic Altis Eco Boost"}</strong><small>Конвектор · 1000 Вт · {liveDevice ? "Cozytouch" : "очікує з’єднання"}</small></div></div>
