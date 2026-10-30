@@ -39,6 +39,7 @@ export default function HomePage() {
   const [liveLoading, setLiveLoading] = useState(true);
   const [connectionRecovered, setConnectionRecovered] = useState(false);
   const gatewayWasOffline = useRef(false);
+  const pendingControl = useRef<{action:string;value:unknown;until:number}|null>(null);
   useEffect(() => {
     const saved = window.localStorage.getItem("atlantic-home-winter-tier");
     if (saved === "discount" || saved === "standard") setWinterTier(saved);
@@ -71,12 +72,26 @@ export default function HomePage() {
         setRoomTemperatureStatus(data?.telemetry?.roomTemperatureStatus === "online" ? "online" : "unknown");
         setRoomTemperatureLastSuccessAt(data?.telemetry?.roomTemperatureLastSuccessAt ?? null);
         setDeviceStatus(data?.deviceStatus === "online" ? "online" : data?.deviceStatus === "offline" ? "offline" : "unknown");
+        const pending = pendingControl.current;
+        const pendingIsActive = !!pending && Date.now() < pending.until;
         const target = Number(readValue(states.TargetTemperature));
-        if (Number.isFinite(target) && target >= 7 && target <= 30) setTemperature(target);
-        const onOff = String(readValue(states.OnOff));
-        setPower(onOff === "on");
+        if (pendingIsActive && pending?.action === "temperature" && target !== Number(pending.value)) {
+          // Cozytouch may acknowledge the command before its read-state endpoint catches up.
+        } else {
+          if (pending?.action === "temperature" && target === Number(pending.value)) pendingControl.current = null;
+          if (Number.isFinite(target) && target >= 7 && target <= 30) setTemperature(target);
+        }
+        const onOff = String(readValue(states.OnOff)).toLowerCase();
+        if (!(pendingIsActive && pending?.action === "power" && (onOff === "on") !== Boolean(pending.value))) {
+          if (pending?.action === "power" && (onOff === "on") === Boolean(pending.value)) pendingControl.current = null;
+          setPower(onOff === "on");
+        }
         const operatingMode = String(readValue(states.OperatingMode) ?? "normal");
-        setMode(operatingMode);
+        if (!(pendingIsActive && pending?.action === "mode" && operatingMode !== String(pending.value))) {
+          if (pending?.action === "mode" && operatingMode === String(pending.value)) pendingControl.current = null;
+          setMode(operatingMode);
+        }
+        if (pending && Date.now() >= pending.until) pendingControl.current = null;
         const room = Number(readValue(data?.telemetry?.roomTemperature));
         setRoomTemperature(Number.isFinite(room) ? room : null);
         const dailyEnergy = data?.telemetry?.dailyEnergy;
@@ -108,6 +123,13 @@ export default function HomePage() {
 
   async function sendControl(action: string, value: unknown) {
     if (controlBusy) return;
+    const previous = { temperature, power, mode };
+    // Update the interface immediately: the heater often applies the command
+    // before Cozytouch's read-state endpoint reflects the new value.
+    if (action === "temperature") setTemperature(Number(value));
+    if (action === "power") setPower(Boolean(value));
+    if (action === "mode") setMode(String(value));
+    pendingControl.current = { action, value, until: Date.now() + 20000 };
     setControlBusy(true);
     setControlError("");
     try {
@@ -118,22 +140,14 @@ export default function HomePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Не вдалося виконати команду.");
-      await fetch("/api/cozytouch/state", { cache: "no-store" }).then(async r => {
-        if (!r.ok) return;
-        const fresh = await r.json();
-        const states = fresh?.heater?.states ?? {};
-        setHeaterStates(states);
-        setGatewayOnline(fresh?.gatewayOnline === true);
-        setDeviceStatus(fresh?.deviceStatus === "online" ? "online" : fresh?.deviceStatus === "offline" ? "offline" : "unknown");
-        setDeviceLastSuccessAt(fresh?.deviceLastSuccessAt ?? null);
-        setRoomTemperatureStatus(fresh?.telemetry?.roomTemperatureStatus === "online" ? "online" : "unknown");
-        setRoomTemperatureLastSuccessAt(fresh?.telemetry?.roomTemperatureLastSuccessAt ?? null);
-        const target = Number(states.TargetTemperature);
-        if (Number.isFinite(target)) setTemperature(target);
-        setPower(String(states.OnOff) === "on");
-        setMode(String(states.OperatingMode ?? "normal"));
-      });
+      // Do not immediately replace the optimistic value with a potentially stale
+      // Cozytouch read. Reconcile on the next poll, while protecting it for 20 sec.
+      window.setTimeout(() => setRefreshTick(tick => tick + 1), 2500);
     } catch (error) {
+      pendingControl.current = null;
+      setTemperature(previous.temperature);
+      setPower(previous.power);
+      setMode(previous.mode);
       setControlError(error instanceof Error ? error.message : "Помилка керування Cozytouch.");
     } finally {
       setControlBusy(false);
