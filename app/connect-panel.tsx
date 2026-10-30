@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Check, Flame, ShieldCheck, Wifi } from "lucide-react";
 
 type Device = {
@@ -32,7 +32,7 @@ export default function ConnectPanel() {
       }).catch(() => undefined);
   }, []);
 
-  async function connect(e: React.FormEvent<HTMLFormElement>) {
+  async function connect(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError("");
