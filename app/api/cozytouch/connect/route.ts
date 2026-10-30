@@ -7,19 +7,34 @@ export const dynamic = "force-dynamic";
 const API = "https://apis.groupe-atlantic.com";
 const CLIENT_ID = "Q3RfMUpWeVRtSUxYOEllZkE3YVVOQmpGblpVYToyRWNORHpfZHkzNDJVSnFvMlo3cFNKTnZVdjBh";
 
+function browserResult(title: string, message: string, success = false) {
+  const color = success ? "#087f5b" : "#b42318";
+  const html = `<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${title} · Atlantic Home</title><body style="margin:0;background:#f4f9ff;color:#172b4d;font:16px -apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh;display:grid;place-items:center"><main style="box-sizing:border-box;width:min(92%,440px);padding:28px;border:1px solid #dce8f5;border-radius:24px;background:white;box-shadow:0 12px 40px #163b6412"><div style="font-size:13px;color:#66809e;letter-spacing:.12em;font-weight:700">ATLANTIC HOME</div><h1 style="font-size:24px;margin:18px 0 10px">${title}</h1><p style="line-height:1.55;color:${color}">${message}</p><a href="/" style="display:block;text-align:center;margin-top:24px;padding:14px;border-radius:14px;background:#1769aa;color:white;text-decoration:none;font-weight:600">Повернутися до застосунку</a></main></body></html>`;
+  return new Response(html, { status: success ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: Request) {
   let stage = "request";
+  const wantsHtml = !(request.headers.get("content-type") ?? "").includes("application/json");
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin) {
+    if (wantsHtml) return browserResult("Запит відхилено", "Онови сторінку застосунку та повтори підключення.");
     return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
   }
   try {
     stage = "session_config";
-    const body = await request.json();
+    const contentType = request.headers.get("content-type") ?? "";
+    const body = contentType.includes("application/json")
+      ? await request.json()
+      : Object.fromEntries(await (async () => {
+          const data = await request.formData();
+          return ["email", "password"].map(key => [key, data.get(key)]);
+        })());
     const email = typeof body.email === "string" ? body.email.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
 
     if (!email || !password || email.length > 254 || password.length > 512) {
+      if (wantsHtml) return browserResult("Не вдалося підключитися", "Перевір email і пароль та спробуй ще раз.");
       return NextResponse.json({ error: "Вкажи email і пароль Cozytouch." }, { status: 400 });
     }
 
@@ -46,10 +61,9 @@ export async function POST(request: Request) {
     if (!authResponse.ok || !token?.access_token || !token?.token_type) {
       console.error("[cozytouch] auth rejected", { status: authResponse.status, error: token?.error ?? null, hasToken: Boolean(token?.access_token), hasTokenType: Boolean(token?.token_type) });
       const invalid = token?.error === "invalid_grant";
-      return NextResponse.json(
-        { error: invalid ? "Cozytouch не прийняв ці облікові дані." : "Не вдалося авторизуватися в Cozytouch. Спробуй пізніше." },
-        { status: invalid ? 401 : 502 }
-      );
+      const message = invalid ? "Cozytouch не прийняв ці облікові дані." : "Не вдалося авторизуватися в Cozytouch. Спробуй пізніше.";
+      if (wantsHtml) return browserResult("Авторизація не пройшла", message);
+      return NextResponse.json({ error: message }, { status: invalid ? 401 : 502 });
     }
 
     stage = "save_session";
@@ -69,16 +83,23 @@ export async function POST(request: Request) {
     if (!setupResponse.ok) {
       session.destroy();
       console.error("[cozytouch] setup request failed", { status: setupResponse.status });
-      return NextResponse.json({ error: "Atlantic прийняв авторизацію, але не віддав список пристроїв.", stage: "read_devices", upstreamStatus: setupResponse.status }, { status: 502 });
+      const message = "Atlantic прийняв авторизацію, але не віддав список пристроїв.";
+      if (wantsHtml) return browserResult("Акаунт авторизовано частково", message);
+      return NextResponse.json({ error: message, stage: "read_devices", upstreamStatus: setupResponse.status }, { status: 502 });
     }
 
     const setup = await setupResponse.json();
     const account = Array.isArray(setup) ? setup[0] : null;
     if (!account || !Array.isArray(account.devices)) {
       console.error("[cozytouch] unexpected setup response", { isArray: Array.isArray(setup), hasAccount: Boolean(account), devicesType: typeof account?.devices });
-      return NextResponse.json({ error: "Atlantic повернув неочікувану структуру даних акаунта.", stage: "parse_devices" }, { status: 502 });
+      const message = "Atlantic повернув неочікувану структуру даних акаунта.";
+      if (wantsHtml) return browserResult("Не вдалося прочитати пристрої", message);
+      return NextResponse.json({ error: message, stage: "parse_devices" }, { status: 502 });
     }
-    const devices = Array.isArray(account?.devices) ? account.devices : [];
+    const devices = account.devices;
+    if (wantsHtml) {
+      return browserResult("Cozytouch підключено", `Авторизація успішна. Знайдено пристроїв: ${devices.length}. Повернися до застосунку, щоб переглянути дані.`, true);
+    }
 
     return NextResponse.json({
       connected: true,
@@ -102,15 +123,15 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[cozytouch] connection exception", { stage, name: error instanceof Error ? error.name : "UnknownError", message });
+    let userMessage = "Помилка сервера під час підключення Cozytouch.";
     if (stage === "session_config" || stage === "save_session") {
-      return NextResponse.json({ error: "Помилка налаштування сесії на сервері. Перевір SESSION_PASSWORD у Vercel: значення має бути не коротше 32 символів.", stage }, { status: 500 });
+      userMessage = "Помилка налаштування сесії на сервері. Перевір SESSION_PASSWORD у Vercel: значення має бути не коротше 32 символів.";
+    } else if (stage === "atlantic_auth") {
+      userMessage = "Не вдалося зв'язатися із сервером авторизації Atlantic. Перевір мережу та спробуй ще раз.";
+    } else if (stage === "read_devices") {
+      userMessage = "Авторизація Cozytouch пройшла, але запит списку пристроїв завершився помилкою.";
     }
-    if (stage === "atlantic_auth") {
-      return NextResponse.json({ error: "Не вдалося зв'язатися із сервером авторизації Atlantic. Перевір мережу та спробуй ще раз.", stage }, { status: 502 });
-    }
-    if (stage === "read_devices") {
-      return NextResponse.json({ error: "Авторизація Cozytouch пройшла, але запит списку пристроїв завершився помилкою.", stage }, { status: 502 });
-    }
-    return NextResponse.json({ error: "Помилка сервера під час підключення Cozytouch.", stage }, { status: 500 });
+    if (wantsHtml) return browserResult("Помилка підключення", userMessage);
+    return NextResponse.json({ error: userMessage, stage }, { status: 500 });
   }
 }
