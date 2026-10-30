@@ -90,6 +90,37 @@ export async function POST(request: Request) {
     }
 
     const setup = await setupResponse.json();
+
+    // Read-only cross-checks: setupviewv2 can be empty while other account
+    // collections may reveal whether this API client can see the installation.
+    const probePaths = [
+      "/magellan/devices",
+      "/magellan/setups",
+      "/magellan/gateways",
+      "/magellan/zones",
+      "/magellan/cozytouch/setupview"
+    ];
+    const probeResults = await Promise.all(probePaths.map(async path => {
+      try {
+        const response = await fetch(API + path, {
+          headers: { Authorization: "Bearer " + token.access_token, "Content-Type": "application/json" },
+          cache: "no-store",
+          signal: AbortSignal.timeout(12000)
+        });
+        const body = await response.json().catch(() => null);
+        const sample = Array.isArray(body) ? body[0] : body;
+        return {
+          path,
+          status: response.status,
+          bodyType: Array.isArray(body) ? "array" : body === null ? "null" : typeof body,
+          count: Array.isArray(body) ? body.length : null,
+          keys: sample && typeof sample === "object" ? Object.keys(sample as Record<string, unknown>).slice(0, 25) : []
+        };
+      } catch (error) {
+        return { path, status: 0, error: error instanceof Error ? error.name : "RequestError" };
+      }
+    }));
+    console.info("[cozytouch] read-only endpoint probe", probeResults);
     const setupAccounts = Array.isArray(setup) ? setup : setup && typeof setup === "object" ? [setup] : [];
     const accountDiagnostics = setupAccounts.map((item: unknown) => {
       const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
