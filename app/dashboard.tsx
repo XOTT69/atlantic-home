@@ -187,23 +187,24 @@ export default function HomePage() {
             <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}{lastUpdatedAt && !liveLoading ? <small className="state-updated">Оновлено {new Date(lastUpdatedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small> : null}</div>
             <section className="setpoint-control" aria-label="Керування температурою">
               <div className="setpoint-heading">
-                <div>
-                  <span className="setpoint-eyebrow">ТЕМПЕРАТУРА НАГРІВУ</span>
-                  <p>Встановити комфортну температуру</p>
-                </div>
-                <span className="setpoint-step">Крок 0,5°</span>
+                <div><span className="setpoint-eyebrow">ТЕМПЕРАТУРА НАГРІВУ</span><p>Встановити комфортну температуру</p></div>
+                <span className="setpoint-step">Крок 0,5 °C</span>
               </div>
-              <div className="setpoint-main">
-                <button className="setpoint-button" disabled={controlBusy || deviceStatus !== "online" || temperature <= 7} onClick={() => sendControl("temperature", Math.max(7, temperature - 0.5))} aria-label="Зменшити температуру">
-                  <span aria-hidden="true">−</span>
-                </button>
-                <div className="setpoint-reading" aria-live="polite">
-                  <strong>{temperature.toLocaleString("uk-UA",{minimumFractionDigits:temperature%1?1:0,maximumFractionDigits:1})}<span>°</span></strong>
-                  <small>ЦІЛЬОВА ТЕМПЕРАТУРА</small>
+              <div className="dial-control">
+                <button className="dial-side-button" disabled={controlBusy || deviceStatus !== "online" || temperature <= 7} onClick={() => sendControl("temperature", Math.max(7, temperature - 0.5))} aria-label="Зменшити температуру">−</button>
+                <div className="setpoint-dial" aria-live="polite">
+                  <svg viewBox="0 0 240 240" className="setpoint-dial-svg" aria-hidden="true">
+                    <circle className="setpoint-dial-track" cx="120" cy="120" r="104"/>
+                    <circle className="setpoint-dial-progress" cx="120" cy="120" r="104" style={{strokeDasharray: `${Math.max(0,Math.min(1,(temperature-7)/23))*654} 654`}}/>
+                  </svg>
+                  <div className="setpoint-dial-inner">
+                    <span className="dial-overline">ВСТАНОВЛЕНА</span>
+                    <strong>{temperature.toLocaleString("uk-UA",{minimumFractionDigits:1,maximumFractionDigits:1})}<span>°</span></strong>
+                    <span className="dial-heat-mark"><Flame size={23}/></span>
+                    <small>Цільова температура</small>
+                  </div>
                 </div>
-                <button className="setpoint-button setpoint-plus" disabled={controlBusy || deviceStatus !== "online" || temperature >= 30} onClick={() => sendControl("temperature", Math.min(30, temperature + 0.5))} aria-label="Збільшити температуру">
-                  <span aria-hidden="true">+</span>
-                </button>
+                <button className="dial-side-button dial-side-plus" disabled={controlBusy || deviceStatus !== "online" || temperature >= 30} onClick={() => sendControl("temperature", Math.min(30, temperature + 0.5))} aria-label="Збільшити температуру">+</button>
               </div>
               <div className="setpoint-slider">
                 <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} disabled={controlBusy || deviceStatus !== "online"} onChange={e=>setTemperature(Number(e.target.value))} onPointerUp={e=>sendControl("temperature", Number((e.target as HTMLInputElement).value))} onKeyUp={e=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(e.key))sendControl("temperature",Number((e.target as HTMLInputElement).value));}}/>
