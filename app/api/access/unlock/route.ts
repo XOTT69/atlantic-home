@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+import { getCozytouchSession } from "@/lib/session";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin || origin !== new URL(request.url).origin) {
+    return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
+  }
+  const configured = process.env.ATLANTIC_APP_PASSWORD;
+  if (!configured || configured.length < 12) {
+    return NextResponse.json({ error: "Власник застосунку ще не налаштував ATLANTIC_APP_PASSWORD у Vercel." }, { status: 503 });
+  }
+  try {
+    const body = await request.json() as { password?: unknown };
+    const supplied = typeof body.password === "string" ? body.password : "";
+    const a = Buffer.from(supplied);
+    const b = Buffer.from(configured);
+    const valid = a.length === b.length && timingSafeEqual(a, b);
+    if (!valid) return NextResponse.json({ error: "Неправильний пароль доступу." }, { status: 401 });
+    const session = await getCozytouchSession();
+    session.appUnlocked = true;
+    await session.save();
+    return NextResponse.json({ unlocked: true });
+  } catch {
+    return NextResponse.json({ error: "Не вдалося відкрити захищену сесію." }, { status: 500 });
+  }
+}
