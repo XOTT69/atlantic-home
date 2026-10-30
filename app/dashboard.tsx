@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -24,6 +24,8 @@ export default function HomePage() {
   const [winterTierReady, setWinterTierReady] = useState(false);
   const [hourlyEnergy, setHourlyEnergy] = useState<{timestamp:number;quantityKwh:number;mode:number}[]>([]);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
+  const [energyDiagnostics, setEnergyDiagnostics] = useState<any>(null);
+  const [temperatureDragging, setTemperatureDragging] = useState(false);
   const [roomTemperatureStatus, setRoomTemperatureStatus] = useState<"online" | "unknown">("unknown");
   const [deviceLastSuccessAt, setDeviceLastSuccessAt] = useState<string | null>(null);
   const [roomTemperatureLastSuccessAt, setRoomTemperatureLastSuccessAt] = useState<string | null>(null);
@@ -104,6 +106,7 @@ export default function HomePage() {
         setHourlyEnergy(hourly?.available === true && Array.isArray(hourly.periods) ? hourly.periods : []);
         const powerW = data?.telemetry?.instantaneousPowerW;
         setInstantaneousPowerW(typeof powerW === "number" && Number.isFinite(powerW) ? powerW : null);
+        setEnergyDiagnostics(data?.telemetry?.energyDiagnostics ?? null);
         setLiveDevice({
           name: heater?.name ?? "Atlantic Altis Eco Boost",
           modelId: heater?.modelId ?? null,
@@ -120,6 +123,15 @@ export default function HomePage() {
     const interval = window.setInterval(refresh, 30000);
     return () => { active = false; window.clearInterval(interval); };
   }, [refreshTick]);
+
+  function temperatureFromPointer(event: ReactPointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left - rect.width / 2;
+    const y = event.clientY - rect.top - rect.height / 2;
+    const angle = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    const progress = Math.max(0, Math.min(270, (angle - 135 + 360) % 360));
+    return Math.round((7 + progress / 270 * 23) * 2) / 2;
+  }
 
   async function sendControl(action: string, value: unknown) {
     if (controlBusy) return;
@@ -184,11 +196,30 @@ export default function HomePage() {
             </div>
             <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}{lastUpdatedAt && !liveLoading ? <small className="state-updated">Оновлено {new Date(lastUpdatedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small> : null}</div>
             <div className="temperature-area">
-              <div className="temp-ring">
+              <div
+                className={temperatureDragging ? "temp-dial dragging" : "temp-dial"}
+                role="slider"
+                aria-label="Цільова температура"
+                aria-valuemin={7}
+                aria-valuemax={30}
+                aria-valuenow={temperature}
+                tabIndex={deviceStatus === "online" ? 0 : -1}
+                onKeyDown={e=>{if(e.key==="ArrowUp"||e.key==="ArrowRight"){e.preventDefault();sendControl("temperature",Math.min(30,temperature+0.5));}if(e.key==="ArrowDown"||e.key==="ArrowLeft"){e.preventDefault();sendControl("temperature",Math.max(7,temperature-0.5));}}}
+                onPointerDown={e=>{if(controlBusy||deviceStatus!=="online")return;e.currentTarget.setPointerCapture(e.pointerId);setTemperatureDragging(true);const v=temperatureFromPointer(e);setTemperature(v);}}
+                onPointerMove={e=>{if(temperatureDragging){setTemperature(temperatureFromPointer(e));}}}
+                onPointerUp={e=>{if(!temperatureDragging)return;const v=temperatureFromPointer(e);setTemperatureDragging(false);sendControl("temperature",v);}}
+                onPointerCancel={()=>setTemperatureDragging(false)}
+              >
+                <svg className="dial-svg" viewBox="0 0 260 260" aria-hidden="true">
+                  <circle className="dial-track" cx="130" cy="130" r="108" />
+                  <circle className="dial-progress" cx="130" cy="130" r="108" style={{strokeDasharray:"509 679",strokeDashoffset:String(509-(temperature-7)/23*509)}} />
+                  <circle className="dial-thumb" cx={130+108*Math.cos((135+(temperature-7)/23*270)*Math.PI/180)} cy={130+108*Math.sin((135+(temperature-7)/23*270)*Math.PI/180)} r="9"/>
+                </svg>
                 <div className="temp-inner">
                   <span className="temp-caption">ЦІЛЬОВА</span>
                   <div className="temp-value">{temperature}<span>°</span></div>
                   <span className="temp-unit">Цельсія</span>
+                  <span className="dial-hint">ПРОВЕДИ ПО КОЛУ</span>
                 </div>
               </div>
               <div className="temp-controls">
