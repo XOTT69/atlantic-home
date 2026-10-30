@@ -120,7 +120,63 @@ export async function POST(request: Request) {
         return { path, status: 0, error: error instanceof Error ? error.name : "RequestError" };
       }
     }));
-    console.info("[cozytouch] read-only endpoint probe", probeResults);
+    // Legacy Cozytouch/Overkiz bridge: older Atlantic integrations expose the
+    // installation through the JWT exchange + enduserAPI/setup flow.
+    // This is read-only; never return or log the JWT, cookies, or raw setup data.
+    let legacyProbe: Record<string, unknown> = { jwtStatus: 0, loginStatus: 0, setupStatus: 0 };
+    try {
+      const jwtResponse = await fetch(API + "/magellan/accounts/jwt", {
+        headers: { Authorization: "Bearer " + token.access_token },
+        cache: "no-store",
+        signal: AbortSignal.timeout(12000)
+      });
+      legacyProbe.jwtStatus = jwtResponse.status;
+      const jwtValue = jwtResponse.ok ? await jwtResponse.text() : "";
+      const jwt = jwtValue.trim().replace(/^"|"$/g, "");
+      if (jwt && jwt.length > 20) {
+        const loginResponse = await fetch("https://ha110-1.overkiz.com/enduser-mobile-web/enduserAPI/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ jwt }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(12000)
+        });
+        legacyProbe.loginStatus = loginResponse.status;
+        const cookieParts = typeof loginResponse.headers.getSetCookie === "function"
+          ? loginResponse.headers.getSetCookie()
+          : [loginResponse.headers.get("set-cookie") ?? ""];
+        const cookie = cookieParts.map((part: string) => part.split(";")[0]).filter(Boolean).join("; ");
+        if (loginResponse.ok && cookie) {
+          const oldSetupResponse = await fetch("https://ha110-1.overkiz.com/enduser-mobile-web/enduserAPI/setup", {
+            headers: { Cookie: cookie, "Cache-Control": "no-cache" },
+            cache: "no-store",
+            signal: AbortSignal.timeout(12000)
+          });
+          legacyProbe.setupStatus = oldSetupResponse.status;
+          if (oldSetupResponse.ok) {
+            const oldSetup = await oldSetupResponse.json().catch(() => null);
+            const oldDevices = oldSetup && typeof oldSetup === "object" && Array.isArray((oldSetup as Record<string, unknown>).devices)
+              ? (oldSetup as Record<string, unknown>).devices as unknown[]
+              : [];
+            const oldGateways = oldSetup && typeof oldSetup === "object" && Array.isArray((oldSetup as Record<string, unknown>).gateways)
+              ? (oldSetup as Record<string, unknown>).gateways as unknown[]
+              : [];
+            legacyProbe.setupType = Array.isArray(oldSetup) ? "array" : oldSetup === null ? "null" : typeof oldSetup;
+            legacyProbe.setupKeys = oldSetup && typeof oldSetup === "object" && !Array.isArray(oldSetup)
+              ? Object.keys(oldSetup as Record<string, unknown>).slice(0, 30) : [];
+            legacyProbe.deviceCount = oldDevices.length;
+            legacyProbe.gatewayCount = oldGateways.length;
+            legacyProbe.firstDeviceKeys = oldDevices[0] && typeof oldDevices[0] === "object"
+              ? Object.keys(oldDevices[0] as Record<string, unknown>).slice(0, 30) : [];
+            legacyProbe.firstGatewayKeys = oldGateways[0] && typeof oldGateways[0] === "object"
+              ? Object.keys(oldGateways[0] as Record<string, unknown>).slice(0, 30) : [];
+          }
+        }
+      }
+    } catch (error) {
+      legacyProbe.error = error instanceof Error ? error.name : "RequestError";
+    }
+    console.info("[cozytouch] read-only endpoint probe", probeResults, legacyProbe);
     const setupAccounts = Array.isArray(setup) ? setup : setup && typeof setup === "object" ? [setup] : [];
     const accountDiagnostics = setupAccounts.map((item: unknown) => {
       const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
@@ -140,6 +196,7 @@ export async function POST(request: Request) {
       accountCount: setupAccounts.length,
       accounts: accountDiagnostics,
       endpointProbes: probeResults,
+      legacyProbe,
       relatedCollections: setupAccounts.map((item: unknown) => {
         const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
         const describe = (value: unknown) => ({
