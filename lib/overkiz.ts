@@ -205,7 +205,12 @@ async function getSetupConsumption(periodicity: "daily" | "hourly") {
     "/consumptions?periodicity=" + periodicity, {
     headers, cache: "no-store", signal: AbortSignal.timeout(15000)
   });
-  if (!response.ok) throw new Error("ATLANTIC_" + periodicity.toUpperCase() + "_CONSUMPTION_FAILED_" + response.status);
+  if (!response.ok) {
+    // Preserve the provider's diagnostic response, but never include request headers or credentials.
+    const responseBody = (await response.text().catch(() => "")).replace(/\\s+/g, " ").slice(0, 700);
+    const detail = responseBody ? ":" + responseBody : "";
+    throw new Error("ATLANTIC_" + periodicity.toUpperCase() + "_CONSUMPTION_FAILED_" + response.status + detail);
+  }
   const payload = await response.json() as unknown;
   const parsed = parseEnergyPayload(payload);
   const periods = parsed.periods;
