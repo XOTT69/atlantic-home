@@ -10,7 +10,12 @@ export async function GET() {
       const devices = Array.isArray(setup.devices) ? setup.devices as Record<string, unknown>[] : [];
       const heater = findAtlanticHeater(setup);
       const gateways = Array.isArray(setup.gateways) ? setup.gateways as Record<string, unknown>[] : [];
-      const gatewayOnline = gateways.some(gateway => gateway.alive === true && String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "").toUpperCase() !== "DISCONNECTED");
+      const gatewayOnline = gateways.some(gateway => {
+        const connectivity = typeof gateway.connectivity === "string"
+          ? gateway.connectivity
+          : String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "");
+        return gateway.alive === true && connectivity.toUpperCase() !== "DISCONNECTED";
+      });
       const sensors = devices.filter(device =>
         String(device.controllableName ?? "").includes("TemperatureInCelcius") ||
         String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption")
@@ -19,9 +24,9 @@ export async function GET() {
       const readings = await Promise.all(targets.map(async device => {
         try {
           const raw = await getDeviceStates(cookie, String(device.deviceURL));
-          return { deviceURL: device.deviceURL, states: normalizeStates(raw), raw };
+          return { deviceURL: device.deviceURL, states: normalizeStates(raw), raw, readOk: true };
         } catch {
-          return { deviceURL: device.deviceURL, states: {}, raw: [] };
+          return { deviceURL: device.deviceURL, states: {}, raw: [], readOk: false };
         }
       }));
       const stateByUrl = new Map(readings.map(item => [item.deviceURL, item]));
@@ -35,6 +40,8 @@ export async function GET() {
       };
       return NextResponse.json({
         connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(), gatewayOnline,
+        deviceOnline: gatewayOnline && heater.available === true && heaterReading?.readOk === true,
+        deviceStatus: !gatewayOnline || heater.available === false ? "offline" : heaterReading?.readOk === true && heater.available === true ? "online" : "unknown",
         heater: {
           id: heater.deviceURL, name: heater.label ?? "Atlantic Altis Eco Boost",
           modelId: heater.controllableName ?? null, isAvailable: heater.available ?? null,
