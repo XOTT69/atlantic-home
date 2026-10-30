@@ -286,6 +286,12 @@ export default function HomePage() {
             <p className="hourly-note">Оцінка середньої потужності за останній погодинний інтервал: кВт·год × 1000. Це не миттєве вимірювання і не показник лише конвектора, якщо в Cozytouch є інші пристрої.</p>
           </div>
           <div className="metric-card tariff"><span>Джерело показника</span><strong>{energyConsumption === null ? "Недоступно" : "Atlantic Cozytouch"}</strong><small>Добовий і погодинний показники — для всієї установки Cozytouch. Миттєва потужність показується окремо лише за наявності відповідного датчика.</small></div>
+          {energyDiagnostics && <div className="energy-card" style={{marginTop:12}}>
+            <div className="energy-top"><div><span>ДІАГНОСТИКА COZYTOUCH</span><strong style={{fontSize:18}}>Що повертає система</strong></div><span className="muted-tag">{energyDiagnostics.devices?.length ?? 0} датчиків</span></div>
+            <div className="empty-caption">Добові дані: {energyDiagnostics.dailyErrorCode || (energyDiagnostics.daily ? "серій: "+energyDiagnostics.daily.seriesCount+" · періодів: "+energyDiagnostics.daily.parsedPeriods : "без помилки")}</div>
+            <div className="empty-caption">Погодинні дані: {energyDiagnostics.hourlyErrorCode || (energyDiagnostics.hourly ? "серій: "+energyDiagnostics.hourly.seriesCount+" · періодів: "+energyDiagnostics.hourly.parsedPeriods : "без помилки")}</div>
+            {energyDiagnostics.devices?.map((device:any,index:number)=><div className="diagnostic-row" key={index}><strong>{device.name}</strong><small>{device.model}</small><small>Поля: {(device.states ?? []).join(", ") || "не описані"}</small><small>Значення: {(device.readings ?? []).map((x:any)=>x.name+"="+String(x.value)).join(" · ") || "поки немає"}</small></div>)}
+          </div>}
         </div>}
 
         {tab === "settings" && <div className="subpage">
