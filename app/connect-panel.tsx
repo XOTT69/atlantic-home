@@ -18,6 +18,7 @@ export default function ConnectPanel() {
   const [device, setDevice] = useState<Device | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetch("/api/cozytouch/state", { cache: "no-store" })
@@ -57,6 +58,23 @@ export default function ConnectPanel() {
     }
   }
 
+  async function copyDiagnostics() {
+    if (!device) return;
+    const report = {
+      modelId: device.modelId,
+      productId: device.productId,
+      isAvailable: device.isAvailable,
+      capabilities: device.capabilities ?? []
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setError("Не вдалося скопіювати дані. Зроби скриншот технічного списку.");
+    }
+  }
+
   async function disconnect() {
     await fetch("/api/cozytouch/disconnect", { method: "POST" });
     setDevice(null);
@@ -82,6 +100,7 @@ export default function ConnectPanel() {
           {(device.capabilities ?? []).map(cap => <div key={cap.id}><span>Capability {cap.id}</span><strong>{cap.value ?? "—"}</strong></div>)}
         </div>
       </details>
+      <button className="copy-diagnostics" onClick={copyDiagnostics}>{copied ? "Дані скопійовано" : "Скопіювати технічні дані"}</button>
       <button className="disconnect-button" onClick={disconnect}>Від’єднати Cozytouch</button>
     </> : <>
       <p className="connect-description">Дані вводяться лише для авторизації в Atlantic. Пароль не записується в браузері чи базі даних; сесія зберігається в зашифрованій HttpOnly cookie.</p>
