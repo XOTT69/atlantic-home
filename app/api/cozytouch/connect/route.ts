@@ -139,6 +139,7 @@ export async function POST(request: Request) {
       topLevelKeys: setup && typeof setup === "object" && !Array.isArray(setup) ? Object.keys(setup as Record<string, unknown>).slice(0, 30) : [],
       accountCount: setupAccounts.length,
       accounts: accountDiagnostics,
+      endpointProbes: probeResults,
       relatedCollections: setupAccounts.map((item: unknown) => {
         const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
         const describe = (value: unknown) => ({
