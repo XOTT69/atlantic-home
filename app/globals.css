@@ -23,3 +23,6 @@
 .hourly-bar{width:100%;min-height:3px;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#c7f36b,#789c4d)}
 .hourly-column small{height:12px;color:#819086;font-size:8px;white-space:nowrap}
 .hourly-note{font-size:9px;line-height:1.5;color:#78877d;margin:12px 0 0}
+
+
+.state-updated{display:block;color:#819086;font-size:9px;margin:5px 0 0 20px}.more-button:disabled{opacity:.55;cursor:wait}.spin{animation:atlantic-spin 1s linear infinite}@keyframes atlantic-spin{to{transform:rotate(360deg)}}
