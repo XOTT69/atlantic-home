@@ -10,6 +10,7 @@ type Device = {
   productId: string | number | null;
   isAvailable: boolean | null;
   capabilities?: { id: number; value: string | null; updatedAt?: string | number | null }[];
+  diagnostics?: Record<string, unknown>;
 };
 
 export default function ConnectPanel() {
@@ -29,7 +30,8 @@ export default function ConnectPanel() {
         if (d) setDevice({
           id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
           isAvailable: d.isAvailable,
-          capabilities: d.capabilities ?? []
+          capabilities: d.capabilities ?? [],
+          diagnostics: { device: d, zones: data?.zones ?? [], gateways: data?.gateways ?? [] }
         });
       }).catch(() => undefined)
       .finally(() => setCheckingSession(false));
@@ -53,7 +55,8 @@ export default function ConnectPanel() {
       }
       setDevice({
         id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
-        isAvailable: d.isAvailable, capabilities: d.capabilities ?? []
+        isAvailable: d.isAvailable, capabilities: d.capabilities ?? [],
+        diagnostics: { device: d, zones: data?.zones ?? [], gateways: data?.gateways ?? [] }
       });
       setPassword("");
     } catch (err) {
@@ -69,7 +72,8 @@ export default function ConnectPanel() {
       modelId: device.modelId,
       productId: device.productId,
       isAvailable: device.isAvailable,
-      capabilities: device.capabilities ?? []
+      capabilities: device.capabilities ?? [],
+      ...device.diagnostics
     };
     try {
       await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
@@ -100,9 +104,10 @@ export default function ConnectPanel() {
       </div>
       <p className="connect-description">Зчитано {device.capabilities?.length ?? 0} параметрів із хмари Atlantic. На наступному кроці зіставимо їх із керуванням саме цієї моделі. До перевірки значень команди не надсилаються.</p>
       <details className="capability-details">
-        <summary>Технічні дані пристрою</summary>
+        <summary>Технічні дані пристрою та шлюзу</summary>
         <div className="capability-list">
           {(device.capabilities ?? []).map(cap => <div key={cap.id}><span>Capability {cap.id}</span><strong>{cap.value ?? "—"}</strong></div>)}
+          <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 11, lineHeight: 1.45, maxHeight: 360, overflow: "auto" }}>{JSON.stringify(device.diagnostics ?? {}, null, 2)}</pre>
         </div>
       </details>
       <button className="copy-diagnostics" onClick={copyDiagnostics}>{copied ? "Дані скопійовано" : "Скопіювати технічні дані"}</button>
