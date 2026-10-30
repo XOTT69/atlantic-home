@@ -18,10 +18,12 @@ export default function HomePage() {
   const [roomTemperature, setRoomTemperature] = useState<number | null>(null);
   const [energyConsumption, setEnergyConsumption] = useState<number | null>(null);
   const [energyDate, setEnergyDate] = useState<string | null>(null);
+  const [energyDayKwh, setEnergyDayKwh] = useState<number | null>(null);
+  const [energyNightKwh, setEnergyNightKwh] = useState<number | null>(null);
+  const [winterTier, setWinterTier] = useState<"discount" | "standard">("discount");
+  const [winterTierReady, setWinterTierReady] = useState(false);
   const [hourlyEnergy, setHourlyEnergy] = useState<{timestamp:number;quantityKwh:number;mode:number}[]>([]);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
-  const [tariffInput, setTariffInput] = useState("");
-  const [tariffReady, setTariffReady] = useState(false);
   const [roomTemperatureStatus, setRoomTemperatureStatus] = useState<"online" | "unknown">("unknown");
   const [deviceLastSuccessAt, setDeviceLastSuccessAt] = useState<string | null>(null);
   const [roomTemperatureLastSuccessAt, setRoomTemperatureLastSuccessAt] = useState<string | null>(null);
@@ -38,18 +40,13 @@ export default function HomePage() {
   const [connectionRecovered, setConnectionRecovered] = useState(false);
   const gatewayWasOffline = useRef(false);
   useEffect(() => {
-    const saved = window.localStorage.getItem("atlantic-home-electricity-tariff");
-    if (saved && Number.isFinite(Number(saved)) && Number(saved) > 0) setTariffInput(saved);
-    setTariffReady(true);
+    const saved = window.localStorage.getItem("atlantic-home-winter-tier");
+    if (saved === "discount" || saved === "standard") setWinterTier(saved);
+    setWinterTierReady(true);
   }, []);
   useEffect(() => {
-    if (!tariffReady) return;
-    if (tariffInput.trim() && Number.isFinite(Number(tariffInput)) && Number(tariffInput) > 0) {
-      window.localStorage.setItem("atlantic-home-electricity-tariff", tariffInput);
-    } else {
-      window.localStorage.removeItem("atlantic-home-electricity-tariff");
-    }
-  }, [tariffInput, tariffReady]);
+    if (winterTierReady) window.localStorage.setItem("atlantic-home-winter-tier", winterTier);
+  }, [winterTier, winterTierReady]);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -86,6 +83,8 @@ export default function HomePage() {
         const energy = dailyEnergy?.available === true && dailyEnergy?.totalKwh !== null ? Number(dailyEnergy.totalKwh) : NaN;
         setEnergyConsumption(Number.isFinite(energy) ? energy : null);
         setEnergyDate(dailyEnergy?.date ?? null);
+        setEnergyDayKwh(typeof dailyEnergy?.peakKwh === "number" ? dailyEnergy.peakKwh : null);
+        setEnergyNightKwh(typeof dailyEnergy?.offPeakKwh === "number" ? dailyEnergy.offPeakKwh : null);
         const hourly = data?.telemetry?.hourlyEnergy;
         setHourlyEnergy(hourly?.available === true && Array.isArray(hourly.periods) ? hourly.periods : []);
         const powerW = data?.telemetry?.instantaneousPowerW;
@@ -225,9 +224,17 @@ export default function HomePage() {
           <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ ЗА ДОБУ</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{energyDate ? "Дата показника: " + new Date(energyDate).toLocaleDateString("uk-UA") : "Atlantic поки не повернув добові дані для цієї установки."}</div></div>
           <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>ПОГОДИННЕ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>{hourlyEnergy.length ? "Остання доба" : "—"}</strong></div><span className="muted-tag">{hourlyEnergy.length ? hourlyEnergy.length + " інтервалів" : "Немає даних"}</span></div>{hourlyEnergy.length ? <><div className="hourly-chart">{hourlyEnergy.map((item,index)=>{const max=Math.max(...hourlyEnergy.map(x=>x.quantityKwh),0.001);return <div className="hourly-column" key={item.timestamp}><div className="hourly-bar" title={item.quantityKwh.toLocaleString("uk-UA")+" кВт·год"} style={{height:Math.max(3,item.quantityKwh/max*100)+"%"}}/><small>{index%3===0?new Date(item.timestamp*1000).toLocaleTimeString("uk-UA",{hour:"2-digit"}):""}</small></div>})}</div><p className="hourly-note">Інтервали з відповіді Atlantic; статистика може надходити із затримкою.</p></> : <div className="empty-caption">Погодинна статистика поки недоступна від API Atlantic або ще не накопичена.</div>}</div>
           <div className="energy-card" style={{marginTop:12}}>
-            <div className="energy-top"><div><span>ВАРТІСТЬ ЕЛЕКТРОЕНЕРГІЇ</span><strong>{energyConsumption !== null && Number(tariffInput) > 0 ? (energyConsumption * Number(tariffInput)).toLocaleString("uk-UA",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"} <small>грн / добу</small></strong></div><div className="metric-icon mint"><Zap size={18}/></div></div>
-            <label className="tariff-input-label">Твій тариф, грн за кВт·год<input aria-label="Тариф за кіловат-годину" inputMode="decimal" type="number" min="0" step="0.01" placeholder="Наприклад, 4.32" value={tariffInput} onChange={event=>setTariffInput(event.target.value)} /></label>
-            <p className="hourly-note">Вкажи тариф зі свого рахунку. Значення зберігається лише в цьому браузері на iPhone.</p>
+            <div className="energy-top"><div><span>ВАРТІСТЬ ЗА ДОБУ</span><strong>{energyDayKwh !== null && energyNightKwh !== null ? (energyDayKwh * (new Date().getMonth() >= 9 || new Date().getMonth() <= 3 ? (winterTier === "discount" ? 2.64 : 4.32) : 4.32) + energyNightKwh * (new Date().getMonth() >= 9 || new Date().getMonth() <= 3 ? (winterTier === "discount" ? 1.32 : 2.16) : 2.16)).toLocaleString("uk-UA",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"} <small>грн</small></strong></div><div className="metric-icon mint"><Zap size={18}/></div></div>
+            <div className="tariff-breakdown">
+              <div><span>День · 07:00–23:00</span><strong>{energyDayKwh === null ? "—" : energyDayKwh.toLocaleString("uk-UA")} кВт·год</strong></div>
+              <div><span>Ніч · 23:00–07:00</span><strong>{energyNightKwh === null ? "—" : energyNightKwh.toLocaleString("uk-UA")} кВт·год</strong></div>
+            </div>
+            <div className="tariff-choice">
+              <span>Зимовий тариф · до 2000 кВт·год/міс.</span>
+              <button type="button" className={winterTier === "discount" ? "selected" : ""} onClick={()=>setWinterTier("discount")}>Пільговий</button>
+              <button type="button" className={winterTier === "standard" ? "selected" : ""} onClick={()=>setWinterTier("standard")}>Понад ліміт</button>
+            </div>
+            <p className="hourly-note">Тарифи: день 4,32 / ніч 2,16 грн; у сезон 1 жовтня — 30 квітня пільговий день 2,64 / ніч 1,32 грн. Перемикай «Понад ліміт», якщо загальне споживання квартири за місяць перевищило 2000 кВт·год. Вартість орієнтовна: Cozytouch може показувати споживання всієї установки, а не лише конвектора.</p>
           </div>
           <div className="energy-card" style={{marginTop:12}}>
             <div className="energy-top"><div><span>ПОТУЖНІСТЬ ЗА ОСТАННЮ ГОДИНУ</span><strong style={{fontSize:24}}>{hourlyEnergy.length ? Math.round(hourlyEnergy[hourlyEnergy.length-1].quantityKwh*1000).toLocaleString("uk-UA")+" Вт" : "—"}</strong></div><span className="muted-tag">Середня</span></div>
