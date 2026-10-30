@@ -43,8 +43,8 @@ export async function GET() {
         connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(), gatewayOnline,
         gatewayStatus: gatewayOnline ? "online" : "offline",
         gatewayCheckedAt: new Date().toISOString(),
-        deviceOnline: gatewayOnline && heater.available === true && heaterReading?.readOk === true,
-        deviceStatus: !gatewayOnline || heater.available === false ? "offline" : heaterReading?.readOk === true && heater.available === true ? "online" : "unknown",
+        deviceOnline: heater.available === true && heaterReading?.readOk === true,
+        deviceStatus: heater.available === false ? "offline" : heater.available === true && heaterReading?.readOk === true ? "online" : "unknown",
         deviceLastSuccessAt: heaterReading?.readOk ? new Date().toISOString() : null,
         heater: {
           id: heater.deviceURL, name: heater.label ?? "Atlantic Altis Eco Boost",
