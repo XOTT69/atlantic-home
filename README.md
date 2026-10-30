@@ -48,3 +48,9 @@ npm run dev
 
 ## Обмеження телеметрії
 Добова й погодинна статистика отримується для всієї установки Cozytouch, а не гарантовано лише для конвектора. Погодинні дані можуть бути недоступні залежно від відповіді Atlantic API. Миттєві W не розраховуються з припущень: без явного стану потужності з одиницею W/kW інтерфейс покаже «—».
+
+## Electricity tariff estimate
+
+The Energy tab uses Cozytouch daily peak/off-peak consumption when both tariff-zone values are available. It estimates cost with the Ukrainian two-zone schedule: day 07:00–23:00 and night 23:00–07:00. From October through April, the default winter benefit estimate is UAH 2.64/kWh day and UAH 1.32/kWh night up to 2,000 kWh/month; the alternate “Понад ліміт” option uses UAH 4.32/kWh day and UAH 2.16/kWh night. From May through September, standard rates apply. The winter tier choice is stored in the current browser.
+
+The 2,000 kWh threshold is a household monthly threshold, while Cozytouch data can cover only the connected setup. The user must switch to “Понад ліміт” once total household monthly consumption exceeds the threshold. Cost is an estimate, not a utility-bill statement; if Cozytouch does not provide separate day/night values, cost remains unavailable rather than being guessed.
