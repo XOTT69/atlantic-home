@@ -90,14 +90,37 @@ export async function POST(request: Request) {
     }
 
     const setup = await setupResponse.json();
-    const account = Array.isArray(setup) ? setup[0] : null;
-    if (!account || !Array.isArray(account.devices)) {
-      console.error("[cozytouch] unexpected setup response", { isArray: Array.isArray(setup), hasAccount: Boolean(account), devicesType: typeof account?.devices });
-      const message = "Atlantic повернув неочікувану структуру даних акаунта.";
-      if (wantsHtml) return browserResult("Не вдалося прочитати пристрої", message);
-      return NextResponse.json({ error: message, stage: "parse_devices" }, { status: 502 });
+    const setupAccounts = Array.isArray(setup) ? setup : setup && typeof setup === "object" ? [setup] : [];
+    const accountDiagnostics = setupAccounts.map((item: unknown) => {
+      const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        keys: Object.keys(account).slice(0, 30),
+        devicesType: Array.isArray(account.devices) ? "array" : typeof account.devices,
+        deviceCount: Array.isArray(account.devices) ? account.devices.length : null
+      };
+    });
+    const devices = setupAccounts.flatMap((item: unknown) => {
+      const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return Array.isArray(account.devices) ? account.devices : [];
+    });
+    const setupDiagnostics = {
+      topLevelType: Array.isArray(setup) ? "array" : setup === null ? "null" : typeof setup,
+      topLevelKeys: setup && typeof setup === "object" && !Array.isArray(setup) ? Object.keys(setup as Record<string, unknown>).slice(0, 30) : [],
+      accountCount: setupAccounts.length,
+      accounts: accountDiagnostics
+    };
+    if (!devices.length) {
+      console.error("[cozytouch] no devices in setup response", setupDiagnostics);
+      const message = "Atlantic авторизував акаунт, але список пристроїв порожній. Технічні дані відповіді: " + JSON.stringify(setupDiagnostics);
+      if (wantsHtml) return browserResult("Пристрої не знайдено", message);
+      return NextResponse.json({ error: message, stage: "empty_devices", diagnostics: setupDiagnostics }, { status: 502 });
     }
-    const devices = account.devices;
+    if (devices.some((device: unknown) => !device || typeof device !== "object")) {
+      console.error("[cozytouch] invalid device entries", setupDiagnostics);
+      const message = "Atlantic повернув некоректний список пристроїв.";
+      if (wantsHtml) return browserResult("Не вдалося прочитати пристрої", message);
+      return NextResponse.json({ error: message, stage: "parse_devices", diagnostics: setupDiagnostics }, { status: 502 });
+    }
     if (wantsHtml) {
       return browserResult("Cozytouch підключено", `Авторизація успішна. Знайдено пристроїв: ${devices.length}. Повернися до застосунку, щоб переглянути дані.`, true);
     }
