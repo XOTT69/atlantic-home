@@ -34,9 +34,18 @@ export async function GET() {
         }
       }));
       const stateByUrl = new Map(readings.map(item => [item.deviceURL, item]));
+      const energyResult = async (loader: () => Promise<unknown>) => {
+        try {
+          return await loader();
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "UNKNOWN";
+          // Only expose a short machine-readable code; never expose tokens or response bodies.
+          return { available: false, errorCode: code.slice(0, 100) };
+        }
+      };
       const [dailyEnergyResult, hourlyEnergyResult] = await Promise.all([
-        getDailySetupConsumption().catch(() => null),
-        getHourlySetupConsumption().catch(() => null)
+        energyResult(getDailySetupConsumption),
+        energyResult(getHourlySetupConsumption)
       ]);
       const heaterReading = stateByUrl.get(heater.deviceURL);
       const temperatureSensor = sensors.find(device => String(device.controllableName ?? "").includes("TemperatureInCelcius"));
