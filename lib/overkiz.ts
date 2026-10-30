@@ -200,7 +200,7 @@ export async function getHourlySetupConsumption() {
   };
 }
 
-function readInstantPowerW(rawStates: Record<string, unknown>[]) {
+export function readInstantPowerW(rawStates: Record<string, unknown>[]) {
   for (const state of rawStates) {
     const name = String(state.name ?? state.qualifiedName ?? "");
     if (!/(ElectricPower|ActivePower|InstantaneousPower|CurrentPower)/i.test(name)) continue;
