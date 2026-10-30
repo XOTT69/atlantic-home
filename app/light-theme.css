@@ -1,0 +1,103 @@
+:root{
+  color-scheme:light;
+  --bg:#f4f9ff;--panel:#ffffff;--panel2:#edf6ff;--line:#dceaf7;
+  --text:#142b43;--muted:#71869b;--lime:#1688e8;--mint:#1aa6a0;
+}
+html,body{background:var(--bg)!important;color:var(--text)!important}
+body{background:radial-gradient(ellipse at 50% -15%,#dceeff 0%,#f5faff 55%,#f7fbff 100%)!important}
+.app-shell{background:transparent}
+.topbar{border-bottom:1px solid #dceaf7}
+.brand{color:#15324e}
+.brand-mark{background:#1688e8;color:#fff;box-shadow:0 5px 16px #1688e82b}
+.brand-light{color:#7690a8}
+.demo-pill{color:#1676c4;border-color:#a9d6fa;background:#eaf5ff}
+.demo-pill span{background:#1688e8}
+.icon-button,.more-button{color:#64819c}
+.page-content{color:#142b43}
+.eyebrow{color:#7792aa}
+.welcome-row h1 span{color:#6b8ba8}
+.weather-mark{color:#62819e}
+.device-card{background:linear-gradient(145deg,#fff 0%,#f1f8ff 100%);border:1px solid #d9eafb;box-shadow:0 18px 48px #3c83bd14}
+.device-icon{background:#e6f3ff;color:#1688e8}
+.device-name strong,.settings-row strong{color:#17344f}
+.device-name small,.settings-row small{color:#7890a6}
+.device-status{color:#66839d}
+.status-dot.active{background:#16a58d;box-shadow:0 0 10px #16a58d44}
+.temp-ring{background:conic-gradient(from 220deg,#1688e8 0deg,#71baf2 210deg,#dcebf8 260deg,#dcebf8 360deg);box-shadow:0 0 38px #1688e812}
+.temp-inner{background:radial-gradient(circle at 50% 38%,#fff,#edf6ff 75%)}
+.temp-caption,.temp-unit{color:#7690a7}
+.temp-value{color:#163754}
+.temp-value span{color:#1688e8}
+.temp-controls button{border:1px solid #cfe4f6;background:#f2f8fe;color:#167dcc;box-shadow:0 3px 10px #477da512}
+.range-wrap input{accent-color:#1688e8}
+.range-labels{color:#7d94a9}
+.device-divider{background:#e0edf7}
+.mode-block>span{color:#7891a7}
+.mode-select button{border:1px solid #d7e7f5;background:#f6faff;color:#617f99}
+.mode-select button.selected{background:#1688e8;border-color:#1688e8;color:#fff}
+.power-button{border:1px solid #cfe2f3;background:#f1f7fd;color:#6d8ba5}
+.power-button.on{background:#1688e8;color:#fff;border-color:#1688e8;box-shadow:0 5px 20px #1688e82b}
+.demo-note{border-top:1px solid #e2edf6;color:#7890a5}
+.section-heading h2{color:#183752}
+.muted-tag{color:#6c879f;border-color:#d7e6f3;background:#f8fbff}
+.metric-card,.schedule-card,.energy-card,.settings-card,.connect-card{background:#fff;border:1px solid #dfebf5;box-shadow:0 8px 25px #356d9910}
+.metric-icon.mint{background:#e7f8f4;color:#159b8e}
+.metric-icon.amber{background:#fff5e6;color:#d18b28}
+.metric-icon.blue{background:#e9f4ff;color:#1688e8}
+.metric-icon.violet{background:#f2edff;color:#8c6bd0}
+.metric-card>span{color:#718aa1}
+.metric-card strong{color:#173752}
+.metric-card small{color:#8ba0b3}
+.tip-card{background:#edf7ff;border:1px solid #d6eafa}
+.tip-icon{color:#1688e8}
+.tip-card strong{color:#1c4568}
+.tip-card p{color:#6e879e}
+.tip-card>svg{color:#7e9bb5}
+.bottom-nav{background:#ffffffed;border-top:1px solid #dceaf6;box-shadow:0 -8px 28px #366d9910}
+.bottom-nav button{color:#8198ac}
+.bottom-nav button.nav-active{color:#1688e8}
+.bottom-nav button.nav-active:before{background:#1688e8}
+.subpage h1{color:#173752}
+.subpage h1 span{color:#1688e8}
+.subcopy{color:#718aa1}
+.schedule-title{color:#1688e8}
+.schedule-title strong{color:#173752}
+.day-picker button{border:1px solid #d9e8f4;background:#f5faff;color:#6f899f}
+.day-picker button.day-active{background:#1688e8;border-color:#1688e8;color:#fff}
+.timeline-labels,.chart-labels{color:#8298ac}
+.timeline-track{background:#e9f1f8}
+.timeline-track i{background:#1688e8}
+.timeline-track i:nth-child(2){background:#a8cce9}
+.schedule-legend{color:#718aa1}
+.schedule-legend i{background:#1688e8}
+.schedule-legend .legend-eco{background:#a8cce9}
+.wide-outline{border-color:#b9d9f1;color:#167dcc;background:#f7fbff}
+.energy-top span{color:#718aa1}
+.energy-top strong{color:#173752}
+.empty-chart{border-bottom:1px solid #dceaf5;background:repeating-linear-gradient(to bottom,transparent 0,transparent 32px,#e9f1f8 33px)}
+.empty-chart div{background:#d9eafb}
+.empty-caption{color:#8ba0b3}
+.settings-row{border-bottom:1px solid #e7eff6}
+.settings-symbol{background:#e8f4ff;color:#1688e8}
+.settings-state{color:#c18a2b}
+.check-icon{color:#159b8e}
+.live-connect{background:#f4faff;border:1px solid #d7e9f8}
+.live-connect-head strong{color:#183752}
+.live-connect-head small{color:#7891a7}
+.connected-label{color:#138a75;border-color:#9edbd0;background:#e9f8f5}
+.detected-device{border-bottom:1px solid #e0edf6;color:#1688e8}
+.detected-device strong{color:#183752}
+.detected-device small{color:#7891a7}
+.device-online{color:#159b8e}
+.device-offline{color:#c18a2b}
+.connect-description{color:#6e879e}
+.connect-form label{color:#58748d}
+.connect-form input{border:1px solid #d4e5f3;background:#fff;color:#183752}
+.connect-form input:focus{border-color:#1688e8;box-shadow:0 0 0 3px #1688e81a}
+.connect-submit{background:#1688e8;color:#fff;box-shadow:0 5px 15px #1688e82b}
+.form-error{color:#c34e4e}
+.security-note{color:#7891a7}
+.security-note svg:first-child,.security-note svg:last-child{color:#159b8e}
+.disconnect-button{border:1px solid #b8d8ed;color:#167dcc;background:#fff}
+.connect-badge{background:#e5f3ff;color:#1688e8}
+@media(prefers-color-scheme:dark){html,body{color-scheme:light}}
