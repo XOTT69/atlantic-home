@@ -162,7 +162,7 @@ export default function HomePage() {
               </div>
             </div>
             <div className="range-wrap">
-              <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} disabled={controlBusy} onChange={e=>setTemperature(Number(e.target.value))} onMouseUp={e=>sendControl("temperature", Number((e.target as HTMLInputElement).value))} onTouchEnd={e=>sendControl("temperature", Number((e.target as HTMLInputElement).value))}/>
+              <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} disabled={controlBusy || deviceStatus !== "online"} onChange={e=>setTemperature(Number(e.target.value))} onPointerUp={e=>sendControl("temperature", Number((e.target as HTMLInputElement).value))}/>
               <div className="range-labels"><span>7°</span><span>30°</span></div>
             </div>
             <div className="device-divider"/>
@@ -170,16 +170,16 @@ export default function HomePage() {
               <div className="mode-block"><span>РЕЖИМ РОБОТИ</span><div className="mode-select">
                 {[{label:"Комфорт",value:"normal"},{label:"ECO",value:"eco"},{label:"Антизамерзання",value:"antifreeze"}].map(item => <button key={item.value} className={mode === item.value ? "selected" : ""} disabled={controlBusy || deviceStatus !== "online"} onClick={()=>sendControl("mode", item.value)}>{item.label}</button>)}
               </div></div>
-              <button className={power ? "power-button power-active" : "power-button"} disabled={controlBusy || deviceStatus !== "online"} onClick={()=>sendControl("power", !power)} aria-label={power ? "Вимкнути конвектор" : "Увімкнути конвектор"}><Power size={20}/></button>
+              <button className={power ? "power-button on" : "power-button"} disabled={controlBusy || deviceStatus !== "online"} onClick={()=>sendControl("power", !power)} aria-label={power ? "Вимкнути конвектор" : "Увімкнути конвектор"}><Power size={20}/></button>
             </div>
             <div className="demo-note"><CircleHelp size={14}/> {controlError || (deviceStatus === "online" ? "Конвектор онлайн. Стан оновлюється кожні 30 секунд." : deviceStatus === "offline" ? "Конвектор офлайн. Керування заблоковано до відновлення зв’язку." : "Очікуємо підтвердження стану конвектора через Cozytouch.")}</div>
           </div>
 
           <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">{liveDevice ? "Дані Cozytouch" : "Немає з'єднання"}</span></div>
           <div className="metrics-grid">
-            <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>{roomTemperature === null ? "—" : roomTemperature.toLocaleString("uk-UA")} °C</strong><small>{roomTemperatureStatus === "online" ? "Датчик відповів" : "Немає свіжого підтвердження"}</small></div>
+            <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>{roomTemperature === null ? "—" : roomTemperature.toLocaleString("uk-UA")} °C</strong><small>{roomTemperatureStatus === "online" ? (roomTemperatureLastSuccessAt ? "Оновлено " + new Date(roomTemperatureLastSuccessAt).toLocaleTimeString("uk-UA", {hour:"2-digit",minute:"2-digit"}) : "Датчик відповів") : "Немає свіжого підтвердження"}</small></div>
             <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Споживання сьогодні</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} {energyConsumption === null ? "" : "кВт·год"}</strong><small>Добовий лічильник Atlantic</small></div>
-            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{deviceStatus === "online" ? "Онлайн" : deviceStatus === "offline" ? "Офлайн" : "Невідомо"}</strong><small>{gatewayOnline ? "Шлюз доступний" : "Шлюз не підтвердив зв’язок"}</small></div>
+            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{deviceStatus === "online" ? "Онлайн" : deviceStatus === "offline" ? "Офлайн" : "Невідомо"}</strong><small>{gatewayOnline ? "Шлюз доступний" : "Шлюз не підтвердив зв’язок"}{deviceLastSuccessAt ? " · відповідь " + new Date(deviceLastSuccessAt).toLocaleTimeString("uk-UA", {hour:"2-digit",minute:"2-digit"}) : ""}</small></div>
             <div className="metric-card"><div className="metric-icon violet"><Activity size={17}/></div><span>Нагрівання</span><strong>{String(heaterStates.TargetHeatingLevel ?? "—")}</strong><small>Рівень нагрівання</small></div>
           </div>
 
