@@ -1,3 +1,4 @@
+import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption } from "@/lib/overkiz";
 
@@ -5,6 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!(await hasAppAccess())) return NextResponse.json({ error: "Потрібен пароль доступу до Atlantic Home." }, { status: 401 });
   try {
     return await withOverkiz(async (cookie, setup) => {
       const devices = Array.isArray(setup.devices) ? setup.devices as Record<string, unknown>[] : [];
