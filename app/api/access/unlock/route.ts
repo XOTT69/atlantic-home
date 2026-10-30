@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
   }
   const configured = process.env.ATLANTIC_APP_PASSWORD;
-  if (!configured || configured.length < 12) {
+  if (!configured || configured.length < 4) {
     return NextResponse.json({ error: "Власник застосунку ще не налаштував ATLANTIC_APP_PASSWORD у Vercel." }, { status: 503 });
   }
   try {
