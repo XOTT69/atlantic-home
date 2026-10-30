@@ -9,7 +9,7 @@ type Device = {
   modelId: string | number | null;
   productId: string | number | null;
   isAvailable: boolean | null;
-  capabilityIds?: number[];
+  capabilities?: { id: number; value: string | null; updatedAt?: string | number | null }[];
 };
 
 export default function ConnectPanel() {
@@ -27,7 +27,7 @@ export default function ConnectPanel() {
         if (d) setDevice({
           id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
           isAvailable: d.isAvailable,
-          capabilityIds: d.capabilities?.map((c: {id:number}) => c.id) ?? []
+          capabilities: d.capabilities ?? []
         });
       }).catch(() => undefined);
   }, []);
@@ -47,7 +47,7 @@ export default function ConnectPanel() {
       const d = data.devices?.[0];
       if (d) setDevice({
         id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
-        isAvailable: d.isAvailable, capabilityIds: d.capabilityIds ?? []
+        isAvailable: d.isAvailable, capabilities: d.capabilities ?? []
       });
       setPassword("");
     } catch (err) {
@@ -75,7 +75,13 @@ export default function ConnectPanel() {
         <div><strong>{device.name}</strong><small>modelId: {device.modelId ?? "—"} · productId: {device.productId ?? "—"}</small></div>
         <span className={device.isAvailable === false ? "device-offline" : "device-online"}>{device.isAvailable === false ? "Офлайн" : "Знайдено"}</span>
       </div>
-      <p className="connect-description">Отримано {device.capabilityIds?.length ?? 0} ідентифікаторів можливостей. Тепер перевіримо, які з них відповідають температурі, режимам та розкладу саме цієї моделі. Команди поки не надсилаються.</p>
+      <p className="connect-description">Зчитано {device.capabilities?.length ?? 0} параметрів із хмари Atlantic. На наступному кроці зіставимо їх із керуванням саме цієї моделі. До перевірки значень команди не надсилаються.</p>
+      <details className="capability-details">
+        <summary>Технічні дані пристрою</summary>
+        <div className="capability-list">
+          {(device.capabilities ?? []).map(cap => <div key={cap.id}><span>Capability {cap.id}</span><strong>{cap.value ?? "—"}</strong></div>)}
+        </div>
+      </details>
       <button className="disconnect-button" onClick={disconnect}>Від’єднати Cozytouch</button>
     </> : <>
       <p className="connect-description">Дані вводяться лише для авторизації в Atlantic. Пароль не записується в браузері чи базі даних; сесія зберігається в зашифрованій HttpOnly cookie.</p>
