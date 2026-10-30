@@ -107,7 +107,7 @@ export default function HomePage() {
         {tab === "settings" && <div className="subpage">
           <p className="eyebrow">КОНФІГУРАЦІЯ</p><h1>Налаштування<span>.</span></h1>
           <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>Ще не підключено до Atlantic Home</small></div><span className="settings-state">Очікує</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>Altis Eco Boost 3 Wi-Fi · 1000 Вт</small></div><span className="settings-state">Не перевірено</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
-          <div className="connect-card"><ConnectPanel /><div className="connect-badge"><Wifi size={22}/></div><h3>Наступні кроки</h3><p>Наступний крок — серверна авторизація та перевірка, які команди й показники доступні твоїй моделі.</p><div className="connect-steps"><span>01</span> Перевірка API та входу <i/><span>02</span> Виявлення пристрою <i/><span>03</span> Реальне керування</div><a className="external-link" href="https://www.cozytouch.com/" target="_blank" rel="noreferrer">Відкрити Cozytouch <ArrowUpRight size={15}/></a></div>
+          <ConnectPanel />
         </div>}
       </section>
 
