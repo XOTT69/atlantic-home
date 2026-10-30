@@ -16,10 +16,10 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_next/")) return;
+  if (url.pathname.startsWith("/api/")) return;
   event.respondWith(
     fetch(event.request).then(response => {
-      if (response.ok && (url.pathname === "/" || url.pathname.startsWith("/manifest") || url.pathname.endsWith(".svg"))) {
+      if (response.ok) {
         const copy = response.clone();
         caches.open(CACHE).then(cache => cache.put(event.request, copy));
       }
