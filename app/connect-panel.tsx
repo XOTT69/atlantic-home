@@ -31,7 +31,7 @@ export default function ConnectPanel() {
           id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
           isAvailable: d.isAvailable,
           capabilities: d.capabilities ?? [],
-          diagnostics: { device: d, zones: data?.zones ?? [], gateways: data?.gateways ?? [] }
+          diagnostics: { devices: data?.devices ?? [], zones: data?.zones ?? [], gateways: data?.gateways ?? [] }
         });
       }).catch(() => undefined)
       .finally(() => setCheckingSession(false));
