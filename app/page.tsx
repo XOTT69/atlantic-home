@@ -125,9 +125,10 @@ export default function HomePage() {
         {tab === "settings" && <div className="subpage">
           <p className="eyebrow">КОНФІГУРАЦІЯ</p><h1>Налаштування<span>.</span></h1>
           <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>{liveDevice ? "Підключено до Atlantic Home" : "Перевірка підключення"}</small></div><span className="settings-state">{liveDevice ? "Підключено" : "Очікує"}</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>{liveDevice?.name ?? "Altis Eco Boost 3 Wi-Fi · 1000 Вт"}</small></div><span className="settings-state">{liveDevice ? "Знайдено" : "Не перевірено"}</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
-          <ConnectPanel />
         </div>}
       </section>
+
+      <div style={{ display: tab === "settings" ? "block" : "none" }} aria-hidden={tab !== "settings"}><ConnectPanel /></div>
 
       <nav className="bottom-nav" aria-label="Основна навігація">
         <button className={tab==="home"?"nav-active":""} onClick={()=>setTab("home")}><House size={19}/><span>Дім</span></button>
