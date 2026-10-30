@@ -156,3 +156,60 @@ export async function getDailySetupConsumption() {
     source: "Atlantic daily consumption", scope: "setup"
   };
 }
+
+export async function getHourlySetupConsumption() {
+  const session = await getCozytouchSession();
+  if (!session.accessToken || !session.expiresAt || Date.now() >= session.expiresAt) {
+    throw new Error("COZYTOUCH_SESSION_EXPIRED");
+  }
+  const headers = { Authorization: "Bearer " + session.accessToken, "Content-Type": "application/json" };
+  const setupResponse = await fetch(ATLANTIC_API + "/magellan/cozytouch/setupviewv2", {
+    headers, cache: "no-store", signal: AbortSignal.timeout(15000)
+  });
+  if (!setupResponse.ok) throw new Error("ATLANTIC_SETUP_VIEW_FAILED");
+  const setupBody = await setupResponse.json() as unknown;
+  const setup = Array.isArray(setupBody) ? setupBody[0] as Record<string, unknown> | undefined : setupBody as Record<string, unknown>;
+  const setupId = setup?.id;
+  if (setupId === undefined || setupId === null) throw new Error("ATLANTIC_SETUP_ID_MISSING");
+
+  const response = await fetch(ATLANTIC_API + "/magellan/setups/" + encodeURIComponent(String(setupId)) + "/consumptions?periodicity=hourly", {
+    headers, cache: "no-store", signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) throw new Error("ATLANTIC_HOURLY_CONSUMPTION_FAILED");
+  const payload = await response.json() as unknown;
+  if (!Array.isArray(payload)) throw new Error("ATLANTIC_HOURLY_CONSUMPTION_INVALID");
+  const series = payload.filter((item): item is Record<string, unknown> =>
+    !!item && typeof item === "object" && item.type === 1 && item.unit === 1 && Array.isArray(item.consumptionPeriods)
+  );
+  const periods = series.flatMap(item => (item.consumptionPeriods as Record<string, unknown>[])
+    .filter(period => Number.isFinite(Number(period.date)) && typeof period.consumedQuantity === "number")
+    .map(period => ({
+      timestamp: Number(period.date),
+      quantityKwh: Number(period.consumedQuantity),
+      mode: Number(period.mode ?? 0)
+    })));
+  if (!periods.length) return { available: false, periods: [], date: null, source: "Atlantic hourly consumption", scope: "setup" };
+  const latestDay = Math.max(...periods.map(period => Math.floor(period.timestamp / 86400)));
+  const latest = periods.filter(period => Math.floor(period.timestamp / 86400) === latestDay).sort((a,b)=>a.timestamp-b.timestamp);
+  return {
+    available: true,
+    periods: latest,
+    date: new Date(latestDay * 86400 * 1000).toISOString(),
+    source: "Atlantic hourly consumption",
+    scope: "setup"
+  };
+}
+
+function readInstantPowerW(rawStates: Record<string, unknown>[]) {
+  for (const state of rawStates) {
+    const name = String(state.name ?? state.qualifiedName ?? "");
+    if (!/(ElectricPower|ActivePower|InstantaneousPower|CurrentPower)/i.test(name)) continue;
+    const value = state.value;
+    const unit = String(state.unit ?? state.unitSymbol ?? "").toLowerCase();
+    const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+    if (!Number.isFinite(numeric)) continue;
+    if (unit === "w" || unit === "watt" || unit === "watts") return Math.round(numeric);
+    if (unit === "kw" || unit === "kilowatt" || unit === "kilowatts") return Math.round(numeric * 1000);
+  }
+  return null;
+}
