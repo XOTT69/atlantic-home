@@ -1,3 +1,4 @@
+import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { withOverkiz, findAtlanticHeater, executeHeaterCommand } from "@/lib/overkiz";
 
@@ -8,6 +9,7 @@ const allowedModes = new Set(["normal", "eco", "antifreeze", "frostprotection", 
 const allowedLevels = new Set(["comfort", "eco", "frostprotection", "boost", "comfort-1", "comfort-2", "off", "secured"]);
 
 export async function POST(request: Request) {
+  if (!(await hasAppAccess())) return NextResponse.json({ error: "Потрібен пароль доступу до Atlantic Home." }, { status: 401 });
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin) {
     return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
