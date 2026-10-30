@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ServiceWorkerRegister from "./sw-register";
 
 export const metadata: Metadata = {
   title: "Atlantic Home",
@@ -19,5 +20,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="uk"><body>{children}</body></html>;
+  return <html lang="uk"><body><ServiceWorkerRegister />{children}</body></html>;
 }
