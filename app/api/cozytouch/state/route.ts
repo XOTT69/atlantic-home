@@ -93,7 +93,7 @@ export async function GET() {
             devices: sensors.map(device => ({
               name: device.label ?? device.controllableName ?? "Atlantic",
               model: device.controllableName ?? null,
-              states: (device.definition?.states ?? []).map(state => state.qualifiedName),
+              states: (((device.definition as {states?: {qualifiedName?: string}[]} | undefined)?.states) ?? []).map(state => state.qualifiedName),
               readings: (stateByUrl.get(device.deviceURL)?.raw ?? []).map(state => ({
                 name: state.name ?? state.qualifiedName ?? null,
                 value: state.value ?? null,
