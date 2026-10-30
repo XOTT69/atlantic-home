@@ -5,12 +5,11 @@ import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
   Clock3, Flame, Gauge, House, Leaf, MoreHorizontal, Power, Settings2,
-  ShieldCheck, Snowflake, Thermometer, Wifi, Zap
+  ShieldCheck, Snowflake, Thermometer, Wifi, Zap, RefreshCw
 } from "lucide-react";
 
 type Tab = "home" | "schedule" | "energy" | "settings";
 
-const days = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "НД"];
 
 export default function HomePage() {
   const [tab, setTab] = useState<Tab>("home");
@@ -30,7 +29,8 @@ export default function HomePage() {
   const [gatewayOnline, setGatewayOnline] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState<"online" | "offline" | "unknown">("unknown");
   const [controlError, setControlError] = useState("");
-  const [selectedDay, setSelectedDay] = useState(0);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [liveDevice, setLiveDevice] = useState<{name:string; modelId:string|null; isAvailable:boolean|null} | null>(null);
   const [liveLoading, setLiveLoading] = useState(true);
   const [connectionRecovered, setConnectionRecovered] = useState(false);
@@ -50,6 +50,7 @@ export default function HomePage() {
         const heater = data?.heater;
         const states = heater?.states ?? {};
         setHeaterStates(states);
+        setLastUpdatedAt(new Date().toISOString());
         const currentGatewayOnline = data?.gatewayOnline === true;
         if (currentGatewayOnline && gatewayWasOffline.current) setConnectionRecovered(true);
         if (!currentGatewayOnline) gatewayWasOffline.current = true;
@@ -89,7 +90,7 @@ export default function HomePage() {
     refresh();
     const interval = window.setInterval(refresh, 30000);
     return () => { active = false; window.clearInterval(interval); };
-  }, []);
+  }, [refreshTick]);
 
   async function sendControl(action: string, value: unknown) {
     if (controlBusy) return;
@@ -151,9 +152,9 @@ export default function HomePage() {
           <div className="device-card">
             <div className="device-head">
               <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>{liveDevice?.name ?? "Atlantic Altis Eco Boost"}</strong><small>Конвектор · 1000 Вт · {liveDevice ? "Cozytouch" : "очікує з’єднання"}</small></div></div>
-              <button className="more-button" aria-label="Додатково"><MoreHorizontal size={21}/></button>
+              <button className="more-button" aria-label="Оновити стан" title="Оновити стан" disabled={liveLoading} onClick={()=>{setLiveLoading(true);setRefreshTick(value=>value+1);}}><RefreshCw size={18} className={liveLoading ? "spin" : ""}/></button>
             </div>
-            <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}</div>
+            <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}{lastUpdatedAt && !liveLoading ? <small className="state-updated">Оновлено {new Date(lastUpdatedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small> : null}</div>
             <div className="temperature-area">
               <div className="temp-ring">
                 <div className="temp-inner">
@@ -195,13 +196,11 @@ export default function HomePage() {
 
         {tab === "schedule" && <div className="subpage">
           <p className="eyebrow">АВТОМАТИЗАЦІЯ</p><h1>Твій розклад<span>.</span></h1>
-          <p className="subcopy">Розклад поки не зчитується з API цієї моделі. Показуємо лише підтверджені дані, без фіктивного графіка.</p>
+          <p className="subcopy">Поки не вмикаємо автоматичний розклад: після знеструмлення годинник конвектора може скидатися, а це здатне змістити час нагрівання.</p>
           <div className="schedule-card">
-            <div className="schedule-title"><CalendarDays size={19}/><strong>Тижневий графік</strong><span className="muted-tag">Недоступно</span></div>
-            <div className="day-picker">{days.map((d,i)=><button key={d} onClick={()=>setSelectedDay(i)} className={selectedDay===i?"day-active":""}>{d}</button>)}</div>
-            <div className="timeline"><div className="timeline-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><div className="timeline-track"><i/><i/><i/></div></div>
-            <div className="schedule-legend"><span><i className="legend-comfort"/> Комфорт · 21°</span><span><i className="legend-eco"/> ECO · 17°</span></div>
-            <button className="wide-outline" onClick={()=>setTab("settings")}>Налаштувати підключення <ArrowUpRight size={16}/></button>
+            <div className="schedule-title"><CalendarDays size={19}/><strong>Розклад нагрівання</strong><span className="muted-tag">На паузі</span></div>
+            <div className="empty-caption">Спочатку перевіримо, чи можна надійно синхронізувати час конвектора через Cozytouch. До цього жодних автоматичних команд за часом не надсилатимемо.</div>
+            <button className="wide-outline" onClick={()=>setTab("home")}>Повернутися до керування <ArrowUpRight size={16}/></button>
           </div>
         </div>}
 
