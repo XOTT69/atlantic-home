@@ -74,20 +74,20 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="temp-controls">
-                <button onClick={() => setTemperature(v => Math.max(7, v - 0.5))} aria-label="Зменшити температуру">−</button>
-                <button onClick={() => setTemperature(v => Math.min(30, v + 0.5))} aria-label="Збільшити температуру">+</button>
+                <button disabled aria-label="Керування температурою ще не доступне">−</button>
+                <button disabled aria-label="Керування температурою ще не доступне">+</button>
               </div>
             </div>
             <div className="range-wrap">
-              <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} onChange={e => setTemperature(Number(e.target.value))}/>
+              <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} disabled readOnly/>
               <div className="range-labels"><span>7°</span><span>30°</span></div>
             </div>
             <div className="device-divider"/>
             <div className="device-bottom">
               <div className="mode-block"><span>РЕЖИМ РОБОТИ</span><div className="mode-select">
-                {["Комфорт", "ECO", "Антизамерзання"].map(item => <button key={item} className={mode === item ? "selected" : ""} onClick={() => setMode(item)}>{item}</button>)}
+                {["Комфорт", "ECO", "Антизамерзання"].map(item => <button key={item} className={mode === item ? "selected" : ""} disabled>{item}</button>)}
               </div></div>
-              <button className={power ? "power-button on" : "power-button"} onClick={() => setPower(v => !v)} aria-label="Перемкнути живлення"><Power size={20}/></button>
+              <button className="power-button" disabled aria-label="Керування живленням ще не доступне"><Power size={20}/></button>
             </div>
             <div className="demo-note"><CircleHelp size={14}/> {liveDevice ? "Пристрій знайдено в реальному акаунті. Команди та телеметрія ще не реалізовані — керування заблоковано." : "Підключи Cozytouch у налаштуваннях. До перевірки API команди не надсилаються."}</div>
           </div>
@@ -105,9 +105,9 @@ export default function HomePage() {
 
         {tab === "schedule" && <div className="subpage">
           <p className="eyebrow">АВТОМАТИЗАЦІЯ</p><h1>Твій розклад<span>.</span></h1>
-          <p className="subcopy">Тижнева програма конвектора. Поки це попередній макет — збереження в Cozytouch ще не підключене.</p>
+          <p className="subcopy">Розклад поки не зчитується з API цієї моделі. Показуємо лише підтверджені дані, без фіктивного графіка.</p>
           <div className="schedule-card">
-            <div className="schedule-title"><CalendarDays size={19}/><strong>Тижневий графік</strong><span className="muted-tag">Чернетка</span></div>
+            <div className="schedule-title"><CalendarDays size={19}/><strong>Тижневий графік</strong><span className="muted-tag">Недоступно</span></div>
             <div className="day-picker">{days.map((d,i)=><button key={d} onClick={()=>setSelectedDay(i)} className={selectedDay===i?"day-active":""}>{d}</button>)}</div>
             <div className="timeline"><div className="timeline-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><div className="timeline-track"><i/><i/><i/></div></div>
             <div className="schedule-legend"><span><i className="legend-comfort"/> Комфорт · 21°</span><span><i className="legend-eco"/> ECO · 17°</span></div>
@@ -118,13 +118,13 @@ export default function HomePage() {
         {tab === "energy" && <div className="subpage">
           <p className="eyebrow">ЕФЕКТИВНІСТЬ</p><h1>Енергія<span>.</span></h1>
           <p className="subcopy">Статистика з'явиться після перевірки, чи передає твій пристрій дані споживання через Cozytouch.</p>
-          <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>— <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-chart"><div/><div/><div/><div/><div/><div/><div/><div/><div/><div/><div/><div/></div><div className="chart-labels"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div><p className="empty-caption">Поки немає даних для побудови графіка</p></div>
-          <div className="metric-card tariff"><span>Твій тариф</span><strong>Не задано</strong><small>Додамо розрахунок вартості після підключення</small></div>
+          <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>— <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">Немає фактичних даних споживання від Atlantic.</div><div className="chart-labels"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div><p className="empty-caption">Поки немає даних для побудови графіка</p></div>
+          <div className="metric-card tariff"><span>Твій тариф</span><strong>Недоступно</strong><small>Немає фактичного споживання для розрахунку</small></div>
         </div>}
 
         {tab === "settings" && <div className="subpage">
           <p className="eyebrow">КОНФІГУРАЦІЯ</p><h1>Налаштування<span>.</span></h1>
-          <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>Ще не підключено до Atlantic Home</small></div><span className="settings-state">Очікує</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>Altis Eco Boost 3 Wi-Fi · 1000 Вт</small></div><span className="settings-state">Не перевірено</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
+          <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>{liveDevice ? "Підключено до Atlantic Home" : "Перевірка підключення"}</small></div><span className="settings-state">{liveDevice ? "Підключено" : "Очікує"}</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>{liveDevice?.name ?? "Altis Eco Boost 3 Wi-Fi · 1000 Вт"}</small></div><span className="settings-state">{liveDevice ? "Знайдено" : "Не перевірено"}</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
           <ConnectPanel />
         </div>}
       </section>
