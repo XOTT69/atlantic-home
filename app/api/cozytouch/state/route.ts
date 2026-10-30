@@ -18,11 +18,11 @@ export async function GET() {
           : String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "");
         return gateway.alive === true && connectivity.toUpperCase() !== "DISCONNECTED";
       });
+      const telemetryPattern = /temperature|electric|energy|consumption|power|watt|current/i;
       const sensors = devices.filter(device =>
-        String(device.controllableName ?? "").includes("TemperatureInCelcius") ||
-        String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption") ||
+        telemetryPattern.test(String(device.controllableName ?? "")) ||
         (Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
-          ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /ElectricPower|ActivePower|InstantaneousPower|CurrentPower/i.test(String(state.qualifiedName ?? ""))))
+          ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => telemetryPattern.test(String(state.qualifiedName ?? ""))))
       );
       const targets = [heater, ...sensors].filter(device => typeof device.deviceURL === "string");
       const readings = await Promise.all(targets.map(async device => {
@@ -49,9 +49,11 @@ export async function GET() {
       ]);
       const heaterReading = stateByUrl.get(heater.deviceURL);
       const temperatureSensor = sensors.find(device => String(device.controllableName ?? "").includes("TemperatureInCelcius"));
-      const energySensor = sensors.find(device => String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption"));
+      const energySensor = sensors.find(device => /energy|consumption/i.test(String(device.controllableName ?? "")) ||
+        (Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
+          ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /energy|consumption/i.test(String(state.qualifiedName ?? "")))));
       const powerSensor = sensors.find(device => Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
-        ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /ElectricPower|ActivePower|InstantaneousPower|CurrentPower/i.test(String(state.qualifiedName ?? ""))));
+        ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /power|watt|current/i.test(String(state.qualifiedName ?? ""))));
       const sensorValue = (url: unknown, key: string) => {
         if (!url) return null;
         const value = stateByUrl.get(url)?.states?.[key];
@@ -84,7 +86,23 @@ export async function GET() {
           ]),
           energyTariffs: energySensor ? Object.fromEntries(
             Object.entries(stateByUrl.get(energySensor.deviceURL)?.states ?? {}).filter(([key]) => key.startsWith("ConsumptionTariff"))
-          ) : {}
+          ) : {},
+          energyDiagnostics: {
+            dailyErrorCode: (dailyEnergyResult as Record<string, unknown>)?.errorCode ?? null,
+            hourlyErrorCode: (hourlyEnergyResult as Record<string, unknown>)?.errorCode ?? null,
+            daily: (dailyEnergyResult as Record<string, unknown>)?.diagnostics ?? null,
+            hourly: (hourlyEnergyResult as Record<string, unknown>)?.diagnostics ?? null,
+            devices: sensors.map(device => ({
+              name: device.label ?? device.controllableName ?? "Atlantic",
+              model: device.controllableName ?? null,
+              states: (device.definition?.states ?? []).map(state => state.qualifiedName),
+              readings: (stateByUrl.get(device.deviceURL)?.raw ?? []).map(state => ({
+                name: state.name ?? state.qualifiedName ?? null,
+                value: state.value ?? null,
+                unit: state.unit ?? state.unitSymbol ?? null
+              }))
+            }))
+          }
         },
         gateway: gateways.map(gateway => ({
           gatewayId: gateway.gatewayId ?? null, alive: gateway.alive ?? null,
