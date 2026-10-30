@@ -15,7 +15,7 @@
 
 Обов'язково задай у Vercel → Project → Settings → Environment Variables:
 - `SESSION_PASSWORD` — випадковий секрет не коротше 32 символів. Використовується для шифрування HttpOnly-сесії.
-- `ATLANTIC_APP_PASSWORD` — окремий пароль доступу до вебзастосунку, не коротше 12 символів.
+- `ATLANTIC_APP_PASSWORD` — окремий пароль доступу до вебзастосунку, не коротше 4 символів.
 
 Додай обидві змінні для Production (і Preview, якщо ним користуєшся), потім виконай Redeploy. Не використовуй один і той самий пароль для Cozytouch, SESSION_PASSWORD та ATLANTIC_APP_PASSWORD. Не надсилай ці значення в чат і не додавай їх до Git.
 
