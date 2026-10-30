@@ -19,6 +19,7 @@ export default function ConnectPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     fetch("/api/cozytouch/state", { cache: "no-store" })
@@ -30,7 +31,8 @@ export default function ConnectPanel() {
           isAvailable: d.isAvailable,
           capabilities: d.capabilities ?? []
         });
-      }).catch(() => undefined);
+      }).catch(() => undefined)
+      .finally(() => setCheckingSession(false));
   }, []);
 
   async function connect(e: FormEvent<HTMLFormElement>) {
@@ -105,6 +107,8 @@ export default function ConnectPanel() {
       </details>
       <button className="copy-diagnostics" onClick={copyDiagnostics}>{copied ? "Дані скопійовано" : "Скопіювати технічні дані"}</button>
       <button className="disconnect-button" onClick={disconnect}>Від’єднати Cozytouch</button>
+    </> : checkingSession ? <>
+      <p className="connect-description">Перевіряємо збережене підключення Cozytouch…</p>
     </> : <>
       <p className="connect-description">Дані вводяться лише для авторизації в Atlantic. Пароль не записується в браузері чи базі даних; сесія зберігається в зашифрованій HttpOnly cookie.</p>
       <form className="connect-form" action="/api/cozytouch/connect" method="post" onSubmit={connect}>
