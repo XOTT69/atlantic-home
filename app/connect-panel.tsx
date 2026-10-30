@@ -26,12 +26,12 @@ export default function ConnectPanel() {
     fetch("/api/cozytouch/state", { cache: "no-store" })
       .then(async r => r.ok ? r.json() : null)
       .then(data => {
-        const d = data?.devices?.[0];
+        const d = data?.heater ?? data?.devices?.find((item: { modelId?: string }) => String(item.modelId ?? "").includes("AtlanticElectricalHeater"));
         if (d) setDevice({
-          id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
+          id: d.id, name: d.name, modelId: d.modelId, productId: null,
           isAvailable: d.isAvailable,
-          capabilities: d.capabilities ?? [],
-          diagnostics: { devices: data?.devices ?? [], zones: data?.zones ?? [], gateways: data?.gateways ?? [] }
+          capabilities: [],
+          diagnostics: { heater: d, telemetry: data?.telemetry ?? {}, devices: data?.devices ?? [], gateway: data?.gateway ?? [] }
         });
       }).catch(() => undefined)
       .finally(() => setCheckingSession(false));
@@ -49,14 +49,16 @@ export default function ConnectPanel() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Не вдалося підключитися.");
-      const d = data.devices?.[0];
+      const stateResponse = await fetch("/api/cozytouch/state", { cache: "no-store" });
+      const live = stateResponse.ok ? await stateResponse.json() : null;
+      const d = live?.heater;
       if (!d) {
-        throw new Error("Cozytouch прийняв авторизацію, але не повернув пристроїв. Перевір, чи конвектор доданий до цього акаунта Cozytouch, і спробуй оновити сторінку.");
+        throw new Error("Авторизація успішна, але не вдалося прочитати контролер Atlantic. Онови сторінку та спробуй ще раз.");
       }
       setDevice({
-        id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
-        isAvailable: d.isAvailable, capabilities: d.capabilities ?? [],
-        diagnostics: { device: d, zones: data?.zones ?? [], gateways: data?.gateways ?? [] }
+        id: d.id, name: d.name, modelId: d.modelId, productId: null,
+        isAvailable: d.isAvailable, capabilities: [],
+        diagnostics: { heater: d, telemetry: live?.telemetry ?? {}, devices: live?.devices ?? [], gateway: live?.gateway ?? [] }
       });
       setPassword("");
     } catch (err) {
@@ -102,7 +104,7 @@ export default function ConnectPanel() {
         <div><strong>{device.name}</strong><small>modelId: {device.modelId ?? "—"} · productId: {device.productId ?? "—"}</small></div>
         <span className={device.isAvailable === false ? "device-offline" : "device-online"}>{device.isAvailable === false ? "Офлайн" : "Знайдено"}</span>
       </div>
-      <p className="connect-description">Зчитано {device.capabilities?.length ?? 0} параметрів із хмари Atlantic. На наступному кроці зіставимо їх із керуванням саме цієї моделі. До перевірки значень команди не надсилаються.</p>
+      <p className="connect-description">Контролер Atlantic визначено. Стан конвектора та датчики читаються через Cozytouch; команди керування доступні на головному екрані.</p>
       <details className="capability-details">
         <summary>Технічні дані пристрою та шлюзу</summary>
         <div className="capability-list">
