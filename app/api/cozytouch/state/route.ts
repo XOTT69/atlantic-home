@@ -39,8 +39,11 @@ export async function GET() {
           return await loader();
         } catch (error) {
           const code = error instanceof Error ? error.message : "UNKNOWN";
-          // Only expose a short machine-readable code; never expose tokens or response bodies.
-          return { available: false, errorCode: code.slice(0, 100) };
+          const marker = code.indexOf(":");
+          const errorCode = (marker >= 0 ? code.slice(0, marker) : code).slice(0, 100);
+          const errorDetails = marker >= 0 ? code.slice(marker + 1, marker + 701) : null;
+          // Provider response body is diagnostic-only; credentials and request headers are never returned.
+          return { available: false, errorCode, errorDetails };
         }
       };
       const [dailyEnergyResult, hourlyEnergyResult] = await Promise.all([
@@ -88,6 +91,7 @@ export async function GET() {
           energyDiagnostics: {
             dailyErrorCode: (dailyEnergyResult as Record<string, unknown>)?.errorCode ?? null,
             hourlyErrorCode: (hourlyEnergyResult as Record<string, unknown>)?.errorCode ?? null,
+            hourlyErrorDetails: (hourlyEnergyResult as Record<string, unknown>)?.errorDetails ?? null,
             daily: (dailyEnergyResult as Record<string, unknown>)?.diagnostics ?? null,
             hourly: (hourlyEnergyResult as Record<string, unknown>)?.diagnostics ?? null,
             devices: sensors.map(device => ({
