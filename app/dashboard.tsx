@@ -20,6 +20,8 @@ export default function HomePage() {
   const [energyDate, setEnergyDate] = useState<string | null>(null);
   const [hourlyEnergy, setHourlyEnergy] = useState<{timestamp:number;quantityKwh:number;mode:number}[]>([]);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
+  const [tariffInput, setTariffInput] = useState("");
+  const [tariffReady, setTariffReady] = useState(false);
   const [roomTemperatureStatus, setRoomTemperatureStatus] = useState<"online" | "unknown">("unknown");
   const [deviceLastSuccessAt, setDeviceLastSuccessAt] = useState<string | null>(null);
   const [roomTemperatureLastSuccessAt, setRoomTemperatureLastSuccessAt] = useState<string | null>(null);
@@ -35,6 +37,19 @@ export default function HomePage() {
   const [liveLoading, setLiveLoading] = useState(true);
   const [connectionRecovered, setConnectionRecovered] = useState(false);
   const gatewayWasOffline = useRef(false);
+  useEffect(() => {
+    const saved = window.localStorage.getItem("atlantic-home-electricity-tariff");
+    if (saved && Number.isFinite(Number(saved)) && Number(saved) > 0) setTariffInput(saved);
+    setTariffReady(true);
+  }, []);
+  useEffect(() => {
+    if (!tariffReady) return;
+    if (tariffInput.trim() && Number.isFinite(Number(tariffInput)) && Number(tariffInput) > 0) {
+      window.localStorage.setItem("atlantic-home-electricity-tariff", tariffInput);
+    } else {
+      window.localStorage.removeItem("atlantic-home-electricity-tariff");
+    }
+  }, [tariffInput, tariffReady]);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -209,7 +224,16 @@ export default function HomePage() {
           <p className="subcopy">Показуємо добовий показник Atlantic, а не загальний накопичувальний лічильник пристрою.</p>
           <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ ЗА ДОБУ</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{energyDate ? "Дата показника: " + new Date(energyDate).toLocaleDateString("uk-UA") : "Atlantic поки не повернув добові дані для цієї установки."}</div></div>
           <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>ПОГОДИННЕ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>{hourlyEnergy.length ? "Остання доба" : "—"}</strong></div><span className="muted-tag">{hourlyEnergy.length ? hourlyEnergy.length + " інтервалів" : "Немає даних"}</span></div>{hourlyEnergy.length ? <><div className="hourly-chart">{hourlyEnergy.map((item,index)=>{const max=Math.max(...hourlyEnergy.map(x=>x.quantityKwh),0.001);return <div className="hourly-column" key={item.timestamp}><div className="hourly-bar" title={item.quantityKwh.toLocaleString("uk-UA")+" кВт·год"} style={{height:Math.max(3,item.quantityKwh/max*100)+"%"}}/><small>{index%3===0?new Date(item.timestamp*1000).toLocaleTimeString("uk-UA",{hour:"2-digit"}):""}</small></div>})}</div><p className="hourly-note">Інтервали з відповіді Atlantic; статистика може надходити із затримкою.</p></> : <div className="empty-caption">Погодинна статистика поки недоступна від API Atlantic або ще не накопичена.</div>}</div>
-          <div className="metric-card tariff"><span>Джерело показника</span><strong>{energyConsumption === null ? "Недоступно" : "Atlantic Cozytouch"}</strong><small>Добовий і погодинний показники — для всієї установки Cozytouch. Потужність у ватах показуємо лише якщо пристрій передає її з одиницями виміру.</small></div>
+          <div className="energy-card" style={{marginTop:12}}>
+            <div className="energy-top"><div><span>ВАРТІСТЬ ЕЛЕКТРОЕНЕРГІЇ</span><strong>{energyConsumption !== null && Number(tariffInput) > 0 ? (energyConsumption * Number(tariffInput)).toLocaleString("uk-UA",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"} <small>грн / добу</small></strong></div><div className="metric-icon mint"><Zap size={18}/></div></div>
+            <label className="tariff-input-label">Твій тариф, грн за кВт·год<input aria-label="Тариф за кіловат-годину" inputMode="decimal" type="number" min="0" step="0.01" placeholder="Наприклад, 4.32" value={tariffInput} onChange={event=>setTariffInput(event.target.value)} /></label>
+            <p className="hourly-note">Вкажи тариф зі свого рахунку. Значення зберігається лише в цьому браузері на iPhone.</p>
+          </div>
+          <div className="energy-card" style={{marginTop:12}}>
+            <div className="energy-top"><div><span>ПОТУЖНІСТЬ ЗА ОСТАННЮ ГОДИНУ</span><strong style={{fontSize:24}}>{hourlyEnergy.length ? Math.round(hourlyEnergy[hourlyEnergy.length-1].quantityKwh*1000).toLocaleString("uk-UA")+" Вт" : "—"}</strong></div><span className="muted-tag">Середня</span></div>
+            <p className="hourly-note">Оцінка середньої потужності за останній погодинний інтервал: кВт·год × 1000. Це не миттєве вимірювання і не показник лише конвектора, якщо в Cozytouch є інші пристрої.</p>
+          </div>
+          <div className="metric-card tariff"><span>Джерело показника</span><strong>{energyConsumption === null ? "Недоступно" : "Atlantic Cozytouch"}</strong><small>Добовий і погодинний показники — для всієї установки Cozytouch. Миттєва потужність показується окремо лише за наявності відповідного датчика.</small></div>
         </div>}
 
         {tab === "settings" && <div className="subpage">
