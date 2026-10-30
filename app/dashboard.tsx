@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -25,7 +25,6 @@ export default function HomePage() {
   const [hourlyEnergy, setHourlyEnergy] = useState<{timestamp:number;quantityKwh:number;mode:number}[]>([]);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
   const [energyDiagnostics, setEnergyDiagnostics] = useState<any>(null);
-  const [temperatureDragging, setTemperatureDragging] = useState(false);
   const [roomTemperatureStatus, setRoomTemperatureStatus] = useState<"online" | "unknown">("unknown");
   const [deviceLastSuccessAt, setDeviceLastSuccessAt] = useState<string | null>(null);
   const [roomTemperatureLastSuccessAt, setRoomTemperatureLastSuccessAt] = useState<string | null>(null);
@@ -124,15 +123,6 @@ export default function HomePage() {
     return () => { active = false; window.clearInterval(interval); };
   }, [refreshTick]);
 
-  function temperatureFromPointer(event: ReactPointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left - rect.width / 2;
-    const y = event.clientY - rect.top - rect.height / 2;
-    const angle = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-    const progress = Math.max(0, Math.min(270, (angle - 135 + 360) % 360));
-    return Math.round((7 + progress / 270 * 23) * 2) / 2;
-  }
-
   async function sendControl(action: string, value: unknown) {
     if (controlBusy) return;
     const previous = { temperature, power, mode };
@@ -195,42 +185,35 @@ export default function HomePage() {
               <button className="more-button" aria-label="Оновити стан" title="Оновити стан" disabled={liveLoading} onClick={()=>{setLiveLoading(true);setRefreshTick(value=>value+1);}}><RefreshCw size={18} className={liveLoading ? "spin" : ""}/></button>
             </div>
             <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}{lastUpdatedAt && !liveLoading ? <small className="state-updated">Оновлено {new Date(lastUpdatedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small> : null}</div>
-            <div className="temperature-area">
-              <div
-                className={temperatureDragging ? "temp-dial dragging" : "temp-dial"}
-                role="slider"
-                aria-label="Цільова температура"
-                aria-valuemin={7}
-                aria-valuemax={30}
-                aria-valuenow={temperature}
-                tabIndex={deviceStatus === "online" ? 0 : -1}
-                onKeyDown={e=>{if(e.key==="ArrowUp"||e.key==="ArrowRight"){e.preventDefault();sendControl("temperature",Math.min(30,temperature+0.5));}if(e.key==="ArrowDown"||e.key==="ArrowLeft"){e.preventDefault();sendControl("temperature",Math.max(7,temperature-0.5));}}}
-                onPointerDown={e=>{if(controlBusy||deviceStatus!=="online")return;e.currentTarget.setPointerCapture(e.pointerId);setTemperatureDragging(true);const v=temperatureFromPointer(e);setTemperature(v);}}
-                onPointerMove={e=>{if(temperatureDragging){setTemperature(temperatureFromPointer(e));}}}
-                onPointerUp={e=>{if(!temperatureDragging)return;const v=temperatureFromPointer(e);setTemperatureDragging(false);sendControl("temperature",v);}}
-                onPointerCancel={()=>setTemperatureDragging(false)}
-              >
-                <svg className="dial-svg" viewBox="0 0 260 260" aria-hidden="true">
-                  <circle className="dial-track" cx="130" cy="130" r="108" />
-                  <circle className="dial-progress" cx="130" cy="130" r="108" style={{strokeDasharray:"509 679",strokeDashoffset:String(509-(temperature-7)/23*509)}} />
-                  <circle className="dial-thumb" cx={130+108*Math.cos((135+(temperature-7)/23*270)*Math.PI/180)} cy={130+108*Math.sin((135+(temperature-7)/23*270)*Math.PI/180)} r="9"/>
-                </svg>
-                <div className="temp-inner">
-                  <span className="temp-caption">ЦІЛЬОВА</span>
-                  <div className="temp-value">{temperature}<span>°</span></div>
-                  <span className="temp-unit">Цельсія</span>
-                  <span className="dial-hint">ПРОВЕДИ ПО КОЛУ</span>
+            <section className="setpoint-control" aria-label="Керування температурою">
+              <div className="setpoint-heading">
+                <div>
+                  <span className="setpoint-eyebrow">ТЕМПЕРАТУРА НАГРІВУ</span>
+                  <p>Встановити комфортну температуру</p>
                 </div>
+                <span className="setpoint-step">Крок 0,5°</span>
               </div>
-              <div className="temp-controls">
-                <button disabled={controlBusy || deviceStatus !== "online" || temperature <= 7} onClick={() => sendControl("temperature", Math.max(7, temperature - 0.5))} aria-label="Зменшити температуру">−</button>
-                <button disabled={controlBusy || deviceStatus !== "online" || temperature >= 30} onClick={() => sendControl("temperature", Math.min(30, temperature + 0.5))} aria-label="Збільшити температуру">+</button>
+              <div className="setpoint-main">
+                <button className="setpoint-button" disabled={controlBusy || deviceStatus !== "online" || temperature <= 7} onClick={() => sendControl("temperature", Math.max(7, temperature - 0.5))} aria-label="Зменшити температуру">
+                  <span aria-hidden="true">−</span>
+                </button>
+                <div className="setpoint-reading" aria-live="polite">
+                  <strong>{temperature.toLocaleString("uk-UA",{minimumFractionDigits:temperature%1?1:0,maximumFractionDigits:1})}<span>°</span></strong>
+                  <small>ЦІЛЬОВА ТЕМПЕРАТУРА</small>
+                </div>
+                <button className="setpoint-button setpoint-plus" disabled={controlBusy || deviceStatus !== "online" || temperature >= 30} onClick={() => sendControl("temperature", Math.min(30, temperature + 0.5))} aria-label="Збільшити температуру">
+                  <span aria-hidden="true">+</span>
+                </button>
               </div>
-            </div>
-            <div className="range-wrap">
-              <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} disabled={controlBusy || deviceStatus !== "online"} onChange={e=>setTemperature(Number(e.target.value))} onPointerUp={e=>sendControl("temperature", Number((e.target as HTMLInputElement).value))}/>
-              <div className="range-labels"><span>7°</span><span>30°</span></div>
-            </div>
+              <div className="setpoint-slider">
+                <input aria-label="Цільова температура" type="range" min="7" max="30" step="0.5" value={temperature} disabled={controlBusy || deviceStatus !== "online"} onChange={e=>setTemperature(Number(e.target.value))} onPointerUp={e=>sendControl("temperature", Number((e.target as HTMLInputElement).value))} onKeyUp={e=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(e.key))sendControl("temperature",Number((e.target as HTMLInputElement).value));}}/>
+                <div className="setpoint-scale"><span>7 °C</span><span>30 °C</span></div>
+              </div>
+              <div className="setpoint-context">
+                <span><i className="setpoint-live-dot"/> {deviceStatus === "online" ? "Керування доступне" : "Очікуємо зв’язок із конвектором"}</span>
+                {roomTemperature !== null && <span>У кімнаті зараз <b>{roomTemperature.toLocaleString("uk-UA")} °C</b></span>}
+              </div>
+            </section>
             <div className="device-divider"/>
             <div className="device-bottom">
               <div className="mode-block"><span>РЕЖИМ РОБОТИ</span><div className="mode-select">
