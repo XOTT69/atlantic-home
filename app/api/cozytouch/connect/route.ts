@@ -9,7 +9,7 @@ const CLIENT_ID = "Q3RfMUpWeVRtSUxYOEllZkE3YVVOQmpGblpVYToyRWNORHpfZHkzNDJVSnFvM
 
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) {
+  if (!origin || origin !== new URL(request.url).origin) {
     return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
   }
   try {
@@ -79,8 +79,12 @@ export async function POST(request: Request) {
         productId: device.productId ?? null,
         modelFamily: device.modelFamily ?? null,
         isAvailable: device.isAvailable ?? null,
-        capabilityIds: Array.isArray(device.capabilities)
-          ? device.capabilities.map((item: Record<string, unknown>) => Number(item.capabilityId)).filter(Number.isFinite)
+        capabilities: Array.isArray(device.capabilities)
+          ? device.capabilities.map((item: Record<string, unknown>) => ({
+              id: Number(item.capabilityId),
+              value: item.value == null ? null : String(item.value),
+              updatedAt: item.modificationDate ?? null
+            })).filter((item: { id: number }) => Number.isFinite(item.id))
           : []
       }))
     });
