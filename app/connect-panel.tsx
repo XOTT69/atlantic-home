@@ -104,11 +104,11 @@ export default function ConnectPanel() {
       <button className="disconnect-button" onClick={disconnect}>Від’єднати Cozytouch</button>
     </> : <>
       <p className="connect-description">Дані вводяться лише для авторизації в Atlantic. Пароль не записується в браузері чи базі даних; сесія зберігається в зашифрованій HttpOnly cookie.</p>
-      <form className="connect-form" onSubmit={connect}>
-        <label>Email Cozytouch<input type="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label>
-        <label>Пароль Cozytouch<input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Пароль від Cozytouch"/></label>
+      <form className="connect-form" action="/api/cozytouch/connect" method="post" onSubmit={connect}>
+        <label>Email Cozytouch<input type="email" name="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label>
+        <label>Пароль Cozytouch<input type="password" name="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Пароль від Cozytouch"/></label>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="connect-submit" disabled={busy}>{busy ? "Підключення…" : "Підключити акаунт"}</button>
+        <button className="connect-submit" type="submit" disabled={busy}>{busy ? "Підключення…" : "Підключити акаунт"}</button>
       </form>
     </>}
     <div className="security-note"><ShieldCheck size={15}/> Серверна авторизація · пароль не зберігається <Check size={14}/></div>
