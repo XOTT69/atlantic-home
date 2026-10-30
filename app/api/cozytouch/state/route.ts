@@ -9,6 +9,8 @@ export async function GET() {
     return await withOverkiz(async (cookie, setup) => {
       const devices = Array.isArray(setup.devices) ? setup.devices as Record<string, unknown>[] : [];
       const heater = findAtlanticHeater(setup);
+      const gateways = Array.isArray(setup.gateways) ? setup.gateways as Record<string, unknown>[] : [];
+      const gatewayOnline = gateways.some(gateway => gateway.alive === true && String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "").toUpperCase() !== "DISCONNECTED");
       const sensors = devices.filter(device =>
         String(device.controllableName ?? "").includes("TemperatureInCelcius") ||
         String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption")
@@ -32,7 +34,7 @@ export async function GET() {
         return value === undefined ? null : value;
       };
       return NextResponse.json({
-        connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(),
+        connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(), gatewayOnline,
         heater: {
           id: heater.deviceURL, name: heater.label ?? "Atlantic Altis Eco Boost",
           modelId: heater.controllableName ?? null, isAvailable: heater.available ?? null,
@@ -47,7 +49,7 @@ export async function GET() {
             Object.entries(stateByUrl.get(energySensor.deviceURL)?.states ?? {}).filter(([key]) => key.startsWith("ConsumptionTariff"))
           ) : {}
         },
-        gateway: (Array.isArray(setup.gateways) ? setup.gateways as Record<string, unknown>[] : []).map(gateway => ({
+        gateway: gateways.map(gateway => ({
           gatewayId: gateway.gatewayId ?? null, alive: gateway.alive ?? null,
           connectivity: gateway.connectivity ?? null, mode: gateway.mode ?? null
         })),
