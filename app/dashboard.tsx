@@ -274,6 +274,7 @@ export default function HomePage() {
             <div className="energy-top"><div><span>ДІАГНОСТИКА COZYTOUCH</span><strong style={{fontSize:18}}>Що повертає система</strong></div><span className="muted-tag">{energyDiagnostics.devices?.length ?? 0} датчиків</span></div>
             <div className="empty-caption">Добові дані: {energyDiagnostics.dailyErrorCode || (energyDiagnostics.daily ? "серій: "+energyDiagnostics.daily.seriesCount+" · періодів: "+energyDiagnostics.daily.parsedPeriods : "без помилки")}</div>
             <div className="empty-caption">Погодинні дані: {energyDiagnostics.hourlyErrorCode || (energyDiagnostics.hourly ? "серій: "+energyDiagnostics.hourly.seriesCount+" · періодів: "+energyDiagnostics.hourly.parsedPeriods : "без помилки")}</div>
+            {energyDiagnostics.hourlyErrorDetails ? <div className="empty-caption" style={{overflowWrap:"anywhere",whiteSpace:"normal"}}>Відповідь Atlantic: {energyDiagnostics.hourlyErrorDetails}</div> : null}
             {energyDiagnostics.devices?.map((device:any,index:number)=><div className="diagnostic-row" key={index}><strong>{device.name}</strong><small>{device.model}</small><small>Поля: {(device.states ?? []).join(", ") || "не описані"}</small><small>Значення: {(device.readings ?? []).map((x:any)=>x.name+"="+String(x.value)).join(" · ") || "поки немає"}</small></div>)}
           </div>}
         </div>}
