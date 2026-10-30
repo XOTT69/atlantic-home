@@ -26,3 +26,5 @@
 
 
 .state-updated{display:block;color:#819086;font-size:9px;margin:5px 0 0 20px}.more-button:disabled{opacity:.55;cursor:wait}.spin{animation:atlantic-spin 1s linear infinite}@keyframes atlantic-spin{to{transform:rotate(360deg)}}
+
+.tariff-input-label{display:grid;gap:8px;margin-top:16px;color:#aab7ac;font-size:10px}.tariff-input-label input{width:100%;border:1px solid #405044;background:#111a14;color:#f2f5ef;border-radius:11px;padding:12px;font-size:14px;outline:none}.tariff-input-label input:focus{border-color:var(--lime)}
