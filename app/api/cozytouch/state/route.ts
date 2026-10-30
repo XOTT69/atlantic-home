@@ -1,6 +1,6 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
-import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption } from "@/lib/overkiz";
+import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption, getHourlySetupConsumption, readInstantPowerW } from "@/lib/overkiz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,9 @@ export async function GET() {
       });
       const sensors = devices.filter(device =>
         String(device.controllableName ?? "").includes("TemperatureInCelcius") ||
-        String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption")
+        String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption") ||
+        (Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
+          ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /ElectricPower|ActivePower|InstantaneousPower|CurrentPower/i.test(String(state.qualifiedName ?? ""))))
       );
       const targets = [heater, ...sensors].filter(device => typeof device.deviceURL === "string");
       const readings = await Promise.all(targets.map(async device => {
@@ -32,10 +34,15 @@ export async function GET() {
         }
       }));
       const stateByUrl = new Map(readings.map(item => [item.deviceURL, item]));
-      const dailyEnergyResult = await getDailySetupConsumption().catch(() => null);
+      const [dailyEnergyResult, hourlyEnergyResult] = await Promise.all([
+        getDailySetupConsumption().catch(() => null),
+        getHourlySetupConsumption().catch(() => null)
+      ]);
       const heaterReading = stateByUrl.get(heater.deviceURL);
       const temperatureSensor = sensors.find(device => String(device.controllableName ?? "").includes("TemperatureInCelcius"));
       const energySensor = sensors.find(device => String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption"));
+      const powerSensor = sensors.find(device => Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
+        ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /ElectricPower|ActivePower|InstantaneousPower|CurrentPower/i.test(String(state.qualifiedName ?? ""))));
       const sensorValue = (url: unknown, key: string) => {
         if (!url) return null;
         const value = stateByUrl.get(url)?.states?.[key];
@@ -61,6 +68,11 @@ export async function GET() {
           roomTemperatureLastSuccessAt: gatewayOnline && stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? new Date().toISOString() : null,
           cumulativeEnergyWh: sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption"),
           dailyEnergy: dailyEnergyResult,
+          hourlyEnergy: hourlyEnergyResult,
+          instantaneousPowerW: readInstantPowerW([
+            ...(heaterReading?.raw ?? []),
+            ...(powerSensor ? stateByUrl.get(powerSensor.deviceURL)?.raw ?? [] : [])
+          ]),
           energyTariffs: energySensor ? Object.fromEntries(
             Object.entries(stateByUrl.get(energySensor.deviceURL)?.states ?? {}).filter(([key]) => key.startsWith("ConsumptionTariff"))
           ) : {}
