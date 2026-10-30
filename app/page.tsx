@@ -18,6 +18,10 @@ export default function HomePage() {
   const [temperature, setTemperature] = useState(21);
   const [roomTemperature, setRoomTemperature] = useState<number | null>(null);
   const [energyConsumption, setEnergyConsumption] = useState<number | null>(null);
+  const [energyDate, setEnergyDate] = useState<string | null>(null);
+  const [roomTemperatureStatus, setRoomTemperatureStatus] = useState<"online" | "unknown">("unknown");
+  const [deviceLastSuccessAt, setDeviceLastSuccessAt] = useState<string | null>(null);
+  const [roomTemperatureLastSuccessAt, setRoomTemperatureLastSuccessAt] = useState<string | null>(null);
   const [mode, setMode] = useState("normal");
   const [heaterStates, setHeaterStates] = useState<Record<string, unknown>>({});
   const [controlBusy, setControlBusy] = useState(false);
@@ -43,6 +47,9 @@ export default function HomePage() {
         const states = heater?.states ?? {};
         setHeaterStates(states);
         setGatewayOnline(data?.gatewayOnline === true);
+        setDeviceLastSuccessAt(data?.deviceLastSuccessAt ?? null);
+        setRoomTemperatureStatus(data?.telemetry?.roomTemperatureStatus === "online" ? "online" : "unknown");
+        setRoomTemperatureLastSuccessAt(data?.telemetry?.roomTemperatureLastSuccessAt ?? null);
         setDeviceStatus(data?.deviceStatus === "online" ? "online" : data?.deviceStatus === "offline" ? "offline" : "unknown");
         const target = Number(readValue(states.TargetTemperature));
         if (Number.isFinite(target) && target >= 7 && target <= 30) setTemperature(target);
@@ -52,8 +59,10 @@ export default function HomePage() {
         setMode(operatingMode);
         const room = Number(readValue(data?.telemetry?.roomTemperature));
         setRoomTemperature(Number.isFinite(room) ? room : null);
-        const energy = Number(readValue(data?.telemetry?.energyConsumption));
+        const dailyEnergy = data?.telemetry?.dailyEnergy;
+        const energy = dailyEnergy?.available === true && dailyEnergy?.totalKwh !== null ? Number(dailyEnergy.totalKwh) : NaN;
         setEnergyConsumption(Number.isFinite(energy) ? energy : null);
+        setEnergyDate(dailyEnergy?.date ?? null);
         setLiveDevice({
           name: heater?.name ?? "Atlantic Altis Eco Boost",
           modelId: heater?.modelId ?? null,
@@ -90,6 +99,9 @@ export default function HomePage() {
         setHeaterStates(states);
         setGatewayOnline(fresh?.gatewayOnline === true);
         setDeviceStatus(fresh?.deviceStatus === "online" ? "online" : fresh?.deviceStatus === "offline" ? "offline" : "unknown");
+        setDeviceLastSuccessAt(fresh?.deviceLastSuccessAt ?? null);
+        setRoomTemperatureStatus(fresh?.telemetry?.roomTemperatureStatus === "online" ? "online" : "unknown");
+        setRoomTemperatureLastSuccessAt(fresh?.telemetry?.roomTemperatureLastSuccessAt ?? null);
         const target = Number(states.TargetTemperature);
         if (Number.isFinite(target)) setTemperature(target);
         setPower(String(states.OnOff) === "on");
@@ -158,8 +170,8 @@ export default function HomePage() {
 
           <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">{liveDevice ? "Дані Cozytouch" : "Немає з'єднання"}</span></div>
           <div className="metrics-grid">
-            <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>{roomTemperature === null ? "—" : roomTemperature.toLocaleString("uk-UA")} °C</strong><small>Датчик кімнатної температури</small></div>
-            <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Потужність</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")}</strong><small>Лічильник Cozytouch · значення API</small></div>
+            <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>{roomTemperature === null ? "—" : roomTemperature.toLocaleString("uk-UA")} °C</strong><small>{roomTemperatureStatus === "online" ? "Датчик відповів" : "Немає свіжого підтвердження"}</small></div>
+            <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Споживання сьогодні</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} {energyConsumption === null ? "" : "кВт·год"}</strong><small>Добовий лічильник Atlantic</small></div>
             <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{deviceStatus === "online" ? "Онлайн" : deviceStatus === "offline" ? "Офлайн" : "Невідомо"}</strong><small>{gatewayOnline ? "Шлюз доступний" : "Шлюз не підтвердив зв’язок"}</small></div>
             <div className="metric-card"><div className="metric-icon violet"><Activity size={17}/></div><span>Нагрівання</span><strong>{String(heaterStates.TargetHeatingLevel ?? "—")}</strong><small>Рівень нагрівання</small></div>
           </div>
@@ -181,9 +193,9 @@ export default function HomePage() {
 
         {tab === "energy" && <div className="subpage">
           <p className="eyebrow">ЕФЕКТИВНІСТЬ</p><h1>Енергія<span>.</span></h1>
-          <p className="subcopy">Статистика з'явиться після перевірки, чи передає твій пристрій дані споживання через Cozytouch.</p>
-          <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} <small>API</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">Немає фактичних даних споживання від Atlantic.</div><div className="chart-labels"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div><p className="empty-caption">Поки немає даних для побудови графіка</p></div>
-          <div className="metric-card tariff"><span>Твій тариф</span><strong>Недоступно</strong><small>Немає фактичного споживання для розрахунку</small></div>
+          <p className="subcopy">Показуємо добовий показник Atlantic, а не загальний накопичувальний лічильник пристрою.</p>
+          <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ ЗА ДОБУ</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{energyDate ? "Дата показника: " + new Date(energyDate).toLocaleDateString("uk-UA") : "Atlantic поки не повернув добові дані для цієї установки."}</div></div>
+          <div className="metric-card tariff"><span>Джерело показника</span><strong>{energyConsumption === null ? "Недоступно" : "Atlantic Cozytouch"}</strong><small>Це добове споживання всієї установки Cozytouch, не миттєва потужність у ватах.</small></div>
         </div>}
 
         {tab === "settings" && <div className="subpage">
