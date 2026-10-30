@@ -5,6 +5,7 @@ export interface CozytouchSession {
   accessToken?: string;
   expiresAt?: number;
   connectedAt?: number;
+  appUnlocked?: boolean;
 }
 
 export async function getCozytouchSession() {
