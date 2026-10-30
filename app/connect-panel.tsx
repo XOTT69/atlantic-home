@@ -46,7 +46,10 @@ export default function ConnectPanel() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Не вдалося підключитися.");
       const d = data.devices?.[0];
-      if (d) setDevice({
+      if (!d) {
+        throw new Error("Cozytouch прийняв авторизацію, але не повернув пристроїв. Перевір, чи конвектор доданий до цього акаунта Cozytouch, і спробуй оновити сторінку.");
+      }
+      setDevice({
         id: d.id, name: d.name, modelId: d.modelId, productId: d.productId,
         isAvailable: d.isAvailable, capabilities: d.capabilities ?? []
       });
