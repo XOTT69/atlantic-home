@@ -8,6 +8,10 @@ const API = "https://apis.groupe-atlantic.com";
 const CLIENT_ID = "Q3RfMUpWeVRtSUxYOEllZkE3YVVOQmpGblpVYToyRWNORHpfZHkzNDJVSnFvMlo3cFNKTnZVdjBh";
 
 export async function POST(request: Request) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) {
+    return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const email = typeof body.email === "string" ? body.email.trim() : "";
