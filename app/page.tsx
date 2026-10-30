@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -18,6 +18,24 @@ export default function HomePage() {
   const [temperature, setTemperature] = useState(21);
   const [mode, setMode] = useState("Комфорт");
   const [selectedDay, setSelectedDay] = useState(0);
+  const [liveDevice, setLiveDevice] = useState<{name:string; modelId:string|null; isAvailable:boolean|null} | null>(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/cozytouch/state", { cache: "no-store" })
+      .then(async response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!active) return;
+        const device = data?.devices?.find((item: { modelId?: string|null; name?: string }) =>
+          String(item?.modelId ?? "").toLowerCase().includes("upod") ||
+          String(item?.name ?? "").toLowerCase().includes("altis")
+        ) ?? data?.devices?.[0];
+        setLiveDevice(device ? { name: device.name, modelId: device.modelId ?? null, isAvailable: device.isAvailable ?? null } : null);
+      })
+      .catch(() => { if (active) setLiveDevice(null); })
+      .finally(() => { if (active) setLiveLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const estimatedPower = useMemo(() => power ? "до 1,0 кВт" : "0 Вт", [power]);
 
@@ -29,7 +47,7 @@ export default function HomePage() {
           <span>atlantic<span className="brand-light">home</span></span>
         </a>
         <div className="top-actions">
-          <span className="demo-pill"><span /> ДЕМО</span>
+          <span className="demo-pill"><span /> {liveLoading ? "З’ЄДНАННЯ" : liveDevice ? "COZYTOUCH" : "НЕ ПІДКЛЮЧЕНО"}</span>
           <button className="icon-button" aria-label="Налаштування" onClick={() => setTab("settings")}><Settings2 size={19}/></button>
         </div>
       </header>
@@ -43,10 +61,10 @@ export default function HomePage() {
 
           <div className="device-card">
             <div className="device-head">
-              <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>Atlantic Altis Eco Boost</strong><small>Конвектор · 1000 Вт</small></div></div>
+              <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>{liveDevice?.name ?? "Atlantic Altis Eco Boost"}</strong><small>Конвектор · 1000 Вт · {liveDevice ? "Cozytouch" : "очікує з’єднання"}</small></div></div>
               <button className="more-button" aria-label="Додатково"><MoreHorizontal size={21}/></button>
             </div>
-            <div className="device-status"><span className={power ? "status-dot active" : "status-dot"}/>{power ? "Увімкнений · очікує підключення" : "Вимкнений · демо-режим"}</div>
+            <div className="device-status"><span className={liveDevice?.isAvailable ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : liveDevice ? (liveDevice.isAvailable === false ? "Пристрій зараз недоступний" : "Знайдено в Cozytouch · стан живлення ще не зчитано") : "Немає активного з’єднання з пристроєм"}</div>
             <div className="temperature-area">
               <div className="temp-ring">
                 <div className="temp-inner">
@@ -71,14 +89,14 @@ export default function HomePage() {
               </div></div>
               <button className={power ? "power-button on" : "power-button"} onClick={() => setPower(v => !v)} aria-label="Перемкнути живлення"><Power size={20}/></button>
             </div>
-            <div className="demo-note"><CircleHelp size={14}/> Це інтерактивний макет. Команди поки не надходять до конвектора.</div>
+            <div className="demo-note"><CircleHelp size={14}/> {liveDevice ? "Пристрій знайдено в реальному акаунті. Команди та телеметрія ще не реалізовані — керування заблоковано." : "Підключи Cozytouch у налаштуваннях. До перевірки API команди не надсилаються."}</div>
           </div>
 
-          <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">Приклад даних</span></div>
+          <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">Реальна телеметрія ще не доступна</span></div>
           <div className="metrics-grid">
             <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>— °C</strong><small>Очікуємо дані Cozytouch</small></div>
-            <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Потужність</span><strong>{estimatedPower}</strong><small>Номінал пристрою</small></div>
-            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>Не підключено</strong><small>Потрібна авторизація</small></div>
+            <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Потужність</span><strong>— Вт</strong><small>Фактичне споживання не передається</small></div>
+            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{liveDevice ? "Cozytouch" : "Не підключено"}</strong><small>{liveDevice ? "Пристрій знайдено" : "Потрібна авторизація"}</small></div>
             <div className="metric-card"><div className="metric-icon violet"><Activity size={17}/></div><span>Нагрівання</span><strong>Невідомо</strong><small>Немає телеметрії</small></div>
           </div>
 
