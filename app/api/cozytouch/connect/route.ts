@@ -24,12 +24,13 @@ export async function POST(request: Request) {
   try {
     stage = "session_config";
     const contentType = request.headers.get("content-type") ?? "";
-    const body = contentType.includes("application/json")
-      ? await request.json()
-      : Object.fromEntries(await (async () => {
-          const data = await request.formData();
-          return ["email", "password"].map(key => [key, data.get(key)]);
-        })());
+    let body: { email?: unknown; password?: unknown };
+    if (contentType.includes("application/json")) {
+      body = await request.json();
+    } else {
+      const formData = await request.formData();
+      body = { email: formData.get("email"), password: formData.get("password") };
+    }
     const email = typeof body.email === "string" ? body.email.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
 
