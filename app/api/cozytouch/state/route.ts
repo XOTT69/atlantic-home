@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates } from "@/lib/overkiz";
+import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption } from "@/lib/overkiz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +30,7 @@ export async function GET() {
         }
       }));
       const stateByUrl = new Map(readings.map(item => [item.deviceURL, item]));
+      const dailyEnergyResult = await getDailySetupConsumption().catch(() => null);
       const heaterReading = stateByUrl.get(heater.deviceURL);
       const temperatureSensor = sensors.find(device => String(device.controllableName ?? "").includes("TemperatureInCelcius"));
       const energySensor = sensors.find(device => String(device.controllableName ?? "").includes("CumulatedElectricalEnergyConsumption"));
@@ -40,8 +41,11 @@ export async function GET() {
       };
       return NextResponse.json({
         connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(), gatewayOnline,
+        gatewayStatus: gatewayOnline ? "online" : "offline",
+        gatewayCheckedAt: new Date().toISOString(),
         deviceOnline: gatewayOnline && heater.available === true && heaterReading?.readOk === true,
         deviceStatus: !gatewayOnline || heater.available === false ? "offline" : heaterReading?.readOk === true && heater.available === true ? "online" : "unknown",
+        deviceLastSuccessAt: heaterReading?.readOk ? new Date().toISOString() : null,
         heater: {
           id: heater.deviceURL, name: heater.label ?? "Atlantic Altis Eco Boost",
           modelId: heater.controllableName ?? null, isAvailable: heater.available ?? null,
@@ -51,7 +55,10 @@ export async function GET() {
         },
         telemetry: {
           roomTemperature: sensorValue(temperatureSensor?.deviceURL, "Temperature"),
-          energyConsumption: sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption"),
+          roomTemperatureStatus: stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? "online" : "unknown",
+          roomTemperatureLastSuccessAt: stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? new Date().toISOString() : null,
+          cumulativeEnergyWh: sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption"),
+          dailyEnergy: dailyEnergyResult,
           energyTariffs: energySensor ? Object.fromEntries(
             Object.entries(stateByUrl.get(energySensor.deviceURL)?.states ?? {}).filter(([key]) => key.startsWith("ConsumptionTariff"))
           ) : {}
