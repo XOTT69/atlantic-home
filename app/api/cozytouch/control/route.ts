@@ -46,6 +46,9 @@ export async function POST(request: Request) {
     }
 
     const result = await withOverkiz(async (cookie, setup) => {
+      const gateways = Array.isArray(setup.gateways) ? setup.gateways as Record<string, unknown>[] : [];
+      const gatewayOnline = gateways.some(gateway => gateway.alive === true && String((gateway.connectivity as Record<string, unknown> | undefined)?.status ?? "").toUpperCase() !== "DISCONNECTED");
+      if (!gatewayOnline) throw new Error("GATEWAY_OFFLINE");
       const heater = findAtlanticHeater(setup);
       const exec = await executeHeaterCommand(cookie, heater, command, parameters);
       return { command, parameters, execution: exec };
@@ -56,10 +59,11 @@ export async function POST(request: Request) {
     const messages: Record<string, string> = {
       COZYTOUCH_SESSION_EXPIRED: "Сесія Cozytouch завершилася. Підключи акаунт знову.",
       ATLANTIC_HEATER_NOT_FOUND: "Не знайдено контролер Atlantic у Cozytouch.",
+      GATEWAY_OFFLINE: "Шлюз Cozytouch зараз не в мережі. Команду не надіслано.",
       COMMAND_NOT_SUPPORTED: "Ця команда не підтримується пристроєм.",
       INVALID_COMMAND_PARAMETERS: "Некоректні параметри команди.",
       OVERKIZ_COMMAND_FAILED: "Cozytouch не прийняв команду. Перевір стан шлюзу та спробуй ще раз."
     };
-    return NextResponse.json({ error: messages[code] ?? "Не вдалося виконати команду Cozytouch.", code }, { status: 502 });
+    return NextResponse.json({ error: messages[code] ?? "Не вдалося виконати команду Cozytouch.", code }, { status: code === "GATEWAY_OFFLINE" ? 409 : 502 });
   }
 }
