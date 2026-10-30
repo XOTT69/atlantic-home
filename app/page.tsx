@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
@@ -96,7 +96,6 @@ export default function HomePage() {
     }
   }
 
-  const estimatedPower = useMemo(() => energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA"), [energyConsumption]);
 
   return (
     <main className="app-shell">
