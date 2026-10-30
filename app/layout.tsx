@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Atlantic Home" },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/icon-512.png", sizes: "512x512", type: "image/png" }],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "512x512", type: "image/png" }]
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
   }
 };
 
@@ -24,5 +24,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="uk"><head><link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon.png" /></head><body><ServiceWorkerRegister />{children}</body></html>;
+  return <html lang="uk"><head><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" /></head><body><ServiceWorkerRegister />{children}</body></html>;
 }
