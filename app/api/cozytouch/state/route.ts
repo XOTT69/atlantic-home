@@ -43,9 +43,9 @@ export async function GET() {
         connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(), gatewayOnline,
         gatewayStatus: gatewayOnline ? "online" : "offline",
         gatewayCheckedAt: new Date().toISOString(),
-        deviceOnline: heater.available === true && heaterReading?.readOk === true,
-        deviceStatus: heater.available === false ? "offline" : heater.available === true && heaterReading?.readOk === true ? "online" : "unknown",
-        deviceLastSuccessAt: heaterReading?.readOk ? new Date().toISOString() : null,
+        deviceOnline: gatewayOnline && heater.available === true && heaterReading?.readOk === true,
+        deviceStatus: heater.available === false ? "offline" : gatewayOnline && heater.available === true && heaterReading?.readOk === true ? "online" : "unknown",
+        deviceLastSuccessAt: gatewayOnline && heaterReading?.readOk ? new Date().toISOString() : null,
         heater: {
           id: heater.deviceURL, name: heater.label ?? "Atlantic Altis Eco Boost",
           modelId: heater.controllableName ?? null, isAvailable: heater.available ?? null,
@@ -55,8 +55,8 @@ export async function GET() {
         },
         telemetry: {
           roomTemperature: sensorValue(temperatureSensor?.deviceURL, "Temperature"),
-          roomTemperatureStatus: stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? "online" : "unknown",
-          roomTemperatureLastSuccessAt: stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? new Date().toISOString() : null,
+          roomTemperatureStatus: gatewayOnline && stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? "online" : "unknown",
+          roomTemperatureLastSuccessAt: gatewayOnline && stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? new Date().toISOString() : null,
           cumulativeEnergyWh: sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption"),
           dailyEnergy: dailyEnergyResult,
           energyTariffs: energySensor ? Object.fromEntries(
