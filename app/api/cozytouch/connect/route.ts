@@ -123,6 +123,7 @@ export async function POST(request: Request) {
     // Legacy Cozytouch/Overkiz bridge: older Atlantic integrations expose the
     // installation through the JWT exchange + enduserAPI/setup flow.
     // This is read-only; never return or log the JWT, cookies, or raw setup data.
+    let legacySetup: Record<string, unknown> | null = null;
     let legacyProbe: Record<string, unknown> = { jwtStatus: 0, loginStatus: 0, setupStatus: 0 };
     try {
       const jwtResponse = await fetch(API + "/magellan/accounts/jwt", {
@@ -155,12 +156,10 @@ export async function POST(request: Request) {
           legacyProbe.setupStatus = oldSetupResponse.status;
           if (oldSetupResponse.ok) {
             const oldSetup = await oldSetupResponse.json().catch(() => null);
-            const oldDevices = oldSetup && typeof oldSetup === "object" && Array.isArray((oldSetup as Record<string, unknown>).devices)
-              ? (oldSetup as Record<string, unknown>).devices as unknown[]
-              : [];
-            const oldGateways = oldSetup && typeof oldSetup === "object" && Array.isArray((oldSetup as Record<string, unknown>).gateways)
-              ? (oldSetup as Record<string, unknown>).gateways as unknown[]
-              : [];
+            legacySetup = oldSetup && typeof oldSetup === "object" && !Array.isArray(oldSetup)
+              ? oldSetup as Record<string, unknown> : null;
+            const oldDevices = legacySetup && Array.isArray(legacySetup.devices) ? legacySetup.devices as unknown[] : [];
+            const oldGateways = legacySetup && Array.isArray(legacySetup.gateways) ? legacySetup.gateways as unknown[] : [];
             legacyProbe.setupType = Array.isArray(oldSetup) ? "array" : oldSetup === null ? "null" : typeof oldSetup;
             legacyProbe.setupKeys = oldSetup && typeof oldSetup === "object" && !Array.isArray(oldSetup)
               ? Object.keys(oldSetup as Record<string, unknown>).slice(0, 30) : [];
@@ -186,17 +185,29 @@ export async function POST(request: Request) {
         deviceCount: Array.isArray(account.devices) ? account.devices.length : null
       };
     });
-    const devices = setupAccounts.flatMap((item: unknown) => {
+    let devices = setupAccounts.flatMap((item: unknown) => {
       const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
       return Array.isArray(account.devices) ? account.devices : [];
     });
+    const legacyDevices = legacySetup && Array.isArray(legacySetup.devices)
+      ? legacySetup.devices.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      : [];
+    const usingLegacyApi = devices.length === 0 && legacyDevices.length > 0;
+    if (usingLegacyApi) devices = legacyDevices;
     const setupDiagnostics = {
       topLevelType: Array.isArray(setup) ? "array" : setup === null ? "null" : typeof setup,
       topLevelKeys: setup && typeof setup === "object" && !Array.isArray(setup) ? Object.keys(setup as Record<string, unknown>).slice(0, 30) : [],
       accountCount: setupAccounts.length,
       accounts: accountDiagnostics,
       endpointProbes: probeResults,
-      legacyProbe,
+      legacyProbe: { ...legacyProbe, devices: legacyDevices.map(device => ({
+        label: typeof device.label === "string" ? device.label : null,
+        controllableName: typeof device.controllableName === "string" ? device.controllableName : null,
+        deviceURL: typeof device.deviceURL === "string" ? device.deviceURL : null,
+        oid: typeof device.oid === "string" ? device.oid : null,
+        available: device.available ?? null,
+        enabled: device.enabled ?? null
+      })) },
       relatedCollections: setupAccounts.map((item: unknown) => {
         const account = item && typeof item === "object" ? item as Record<string, unknown> : {};
         const describe = (value: unknown) => ({
@@ -228,13 +239,18 @@ export async function POST(request: Request) {
     return NextResponse.json({
       connected: true,
       deviceCount: devices.length,
+      source: usingLegacyApi ? "cozytouch-legacy" : "magellan",
       devices: devices.map((device: Record<string, unknown>) => ({
-        id: String(device.deviceId ?? ""),
-        name: String(device.name ?? "Atlantic"),
-        modelId: device.modelId ?? null,
+        id: String(device.deviceId ?? device.deviceURL ?? device.oid ?? ""),
+        name: String(device.name ?? device.label ?? "Atlantic"),
+        modelId: device.modelId ?? device.controllableName ?? null,
         productId: device.productId ?? null,
-        modelFamily: device.modelFamily ?? null,
-        isAvailable: device.isAvailable ?? null,
+        modelFamily: device.modelFamily ?? device.uiClass ?? null,
+        isAvailable: device.isAvailable ?? device.available ?? null,
+        enabled: device.enabled ?? null,
+        deviceURL: device.deviceURL ?? null,
+        oid: device.oid ?? null,
+        type: device.type ?? null,
         capabilities: Array.isArray(device.capabilities)
           ? device.capabilities.map((item: Record<string, unknown>) => ({
               id: Number(item.capabilityId),
