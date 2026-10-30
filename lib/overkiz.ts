@@ -118,46 +118,73 @@ export async function executeHeaterCommand(
 }
 
 
-export async function getDailySetupConsumption() {
-  const session = await getCozytouchSession();
-  if (!session.accessToken || !session.expiresAt || Date.now() >= session.expiresAt) {
-    throw new Error("COZYTOUCH_SESSION_EXPIRED");
+type EnergyPeriod = { timestamp: number; quantityKwh: number; mode: number };
+
+function numericValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value.replace(",", "."));
+    if (Number.isFinite(parsed)) return parsed;
   }
-  const headers = { Authorization: "Bearer " + session.accessToken, "Content-Type": "application/json" };
-  const setupResponse = await fetch(ATLANTIC_API + "/magellan/cozytouch/setupviewv2", {
-    headers, cache: "no-store", signal: AbortSignal.timeout(15000)
-  });
-  if (!setupResponse.ok) throw new Error("ATLANTIC_SETUP_VIEW_FAILED");
-  const setupBody = await setupResponse.json() as unknown;
-  const setup = Array.isArray(setupBody) ? setupBody[0] as Record<string, unknown> | undefined : setupBody as Record<string, unknown>;
-  const setupId = setup?.id;
-  if (setupId === undefined || setupId === null) throw new Error("ATLANTIC_SETUP_ID_MISSING");
+  return null;
+}
 
-  const response = await fetch(ATLANTIC_API + "/magellan/setups/" + encodeURIComponent(String(setupId)) + "/consumptions?periodicity=daily", {
-    headers, cache: "no-store", signal: AbortSignal.timeout(15000)
-  });
-  if (!response.ok) throw new Error("ATLANTIC_CONSUMPTION_FAILED");
-  const payload = await response.json() as unknown;
-  if (!Array.isArray(payload)) throw new Error("ATLANTIC_CONSUMPTION_INVALID");
+function periodTimestamp(value: unknown): number | null {
+  const numeric = numericValue(value);
+  if (numeric !== null) {
+    const seconds = numeric > 1e12 ? numeric / 1000 : numeric;
+    return seconds > 0 ? Math.floor(seconds) : null;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+  }
+  return null;
+}
 
-  const series = payload.filter((item): item is Record<string, unknown> =>
-    !!item && typeof item === "object" && item.type === 1 && item.unit === 1 && Array.isArray(item.consumptionPeriods)
+function parseEnergyPayload(payload: unknown) {
+  const entries = Array.isArray(payload) ? payload : [];
+  const withPeriods = entries.filter((item): item is Record<string, unknown> =>
+    !!item && typeof item === "object" && Array.isArray((item as Record<string, unknown>).consumptionPeriods)
   );
-  const periods = series.flatMap(item => (item.consumptionPeriods as Record<string, unknown>[]).filter(period => Number.isInteger(period.date)));
-  if (!periods.length) return { available: false, totalKwh: null, peakKwh: null, offPeakKwh: null, date: null, source: "Atlantic daily consumption" };
-  const latestDate = Math.max(...periods.map(period => Number(period.date)));
-  const today = periods.filter(period => Number(period.date) === latestDate);
-  const sum = (mode?: number) => Number(today.filter(period => mode === undefined || Number(period.mode ?? 0) === mode)
-    .reduce((total, period) => total + (typeof period.consumedQuantity === "number" ? period.consumedQuantity : 0), 0).toFixed(3));
-  const hasTariffs = today.some(period => Number(period.mode ?? 0) === 1) && today.some(period => Number(period.mode ?? 0) === 2);
+  // Atlantic has returned different enum representations across API versions.
+  // Prefer the known electricity/kWh series, but don't discard all data if enums changed.
+  const preferred = withPeriods.filter(item => {
+    const type = String(item.type ?? "").toLowerCase();
+    const unit = String(item.unit ?? "").toLowerCase();
+    return (type === "1" || type.includes("electric")) && (unit === "1" || unit.includes("kwh"));
+  });
+  const selected = preferred.length ? preferred : withPeriods;
+  const periods: EnergyPeriod[] = [];
+  for (const item of selected) {
+    for (const raw of item.consumptionPeriods as Record<string, unknown>[]) {
+      const timestamp = periodTimestamp(raw.date ?? raw.timestamp ?? raw.startDate ?? raw.periodStart);
+      const quantity = numericValue(raw.consumedQuantity ?? raw.quantity ?? raw.consumption ?? raw.value);
+      if (timestamp === null || quantity === null) continue;
+      const modeRaw = raw.mode ?? raw.tariffMode ?? raw.tariff ?? raw.periodType;
+      const modeText = String(modeRaw ?? "").toLowerCase();
+      const mode = modeText === "1" || modeText.includes("peak") || modeText.includes("day") ? 1
+        : modeText === "2" || modeText.includes("offpeak") || modeText.includes("night") ? 2
+        : numericValue(modeRaw) ?? 0;
+      periods.push({ timestamp, quantityKwh: quantity, mode });
+    }
+  }
   return {
-    available: true, totalKwh: sum(), peakKwh: hasTariffs ? sum(1) : null,
-    offPeakKwh: hasTariffs ? sum(2) : null, date: new Date(latestDate * 1000).toISOString(),
-    source: "Atlantic daily consumption", scope: "setup"
+    periods,
+    diagnostics: {
+      payloadIsArray: Array.isArray(payload),
+      seriesCount: entries.length,
+      seriesWithPeriods: withPeriods.length,
+      selectedSeriesCount: selected.length,
+      sampleSeriesKeys: withPeriods[0] ? Object.keys(withPeriods[0]).slice(0, 20) : [],
+      samplePeriodKeys: withPeriods[0] && Array.isArray(withPeriods[0].consumptionPeriods) && withPeriods[0].consumptionPeriods[0]
+        ? Object.keys(withPeriods[0].consumptionPeriods[0] as Record<string, unknown>).slice(0, 20) : [],
+      parsedPeriods: periods.length
+    }
   };
 }
 
-export async function getHourlySetupConsumption() {
+async function getSetupConsumption(periodicity: "daily" | "hourly") {
   const session = await getCozytouchSession();
   if (!session.accessToken || !session.expiresAt || Date.now() >= session.expiresAt) {
     throw new Error("COZYTOUCH_SESSION_EXPIRED");
@@ -166,38 +193,51 @@ export async function getHourlySetupConsumption() {
   const setupResponse = await fetch(ATLANTIC_API + "/magellan/cozytouch/setupviewv2", {
     headers, cache: "no-store", signal: AbortSignal.timeout(15000)
   });
-  if (!setupResponse.ok) throw new Error("ATLANTIC_SETUP_VIEW_FAILED");
+  if (!setupResponse.ok) throw new Error("ATLANTIC_SETUP_VIEW_FAILED_" + setupResponse.status);
   const setupBody = await setupResponse.json() as unknown;
-  const setup = Array.isArray(setupBody) ? setupBody[0] as Record<string, unknown> | undefined : setupBody as Record<string, unknown>;
+  const setupCandidates = Array.isArray(setupBody) ? setupBody : [setupBody];
+  const setup = setupCandidates.find(item => item && typeof item === "object" &&
+    (item as Record<string, unknown>).id !== undefined) as Record<string, unknown> | undefined;
   const setupId = setup?.id;
   if (setupId === undefined || setupId === null) throw new Error("ATLANTIC_SETUP_ID_MISSING");
 
-  const response = await fetch(ATLANTIC_API + "/magellan/setups/" + encodeURIComponent(String(setupId)) + "/consumptions?periodicity=hourly", {
+  const response = await fetch(ATLANTIC_API + "/magellan/setups/" + encodeURIComponent(String(setupId)) +
+    "/consumptions?periodicity=" + periodicity, {
     headers, cache: "no-store", signal: AbortSignal.timeout(15000)
   });
-  if (!response.ok) throw new Error("ATLANTIC_HOURLY_CONSUMPTION_FAILED");
+  if (!response.ok) throw new Error("ATLANTIC_" + periodicity.toUpperCase() + "_CONSUMPTION_FAILED_" + response.status);
   const payload = await response.json() as unknown;
-  if (!Array.isArray(payload)) throw new Error("ATLANTIC_HOURLY_CONSUMPTION_INVALID");
-  const series = payload.filter((item): item is Record<string, unknown> =>
-    !!item && typeof item === "object" && item.type === 1 && item.unit === 1 && Array.isArray(item.consumptionPeriods)
-  );
-  const periods = series.flatMap(item => (item.consumptionPeriods as Record<string, unknown>[])
-    .filter(period => Number.isFinite(Number(period.date)) && typeof period.consumedQuantity === "number")
-    .map(period => ({
-      timestamp: Number(period.date),
-      quantityKwh: Number(period.consumedQuantity),
-      mode: Number(period.mode ?? 0)
-    })));
-  if (!periods.length) return { available: false, periods: [], date: null, source: "Atlantic hourly consumption", scope: "setup" };
+  const parsed = parseEnergyPayload(payload);
+  const periods = parsed.periods;
+  if (!periods.length) {
+    return periodicity === "daily"
+      ? { available: false, totalKwh: null, peakKwh: null, offPeakKwh: null, date: null, source: "Atlantic daily consumption", diagnostics: parsed.diagnostics }
+      : { available: false, periods: [], date: null, source: "Atlantic hourly consumption", diagnostics: parsed.diagnostics };
+  }
   const latestDay = Math.max(...periods.map(period => Math.floor(period.timestamp / 86400)));
-  const latest = periods.filter(period => Math.floor(period.timestamp / 86400) === latestDay).sort((a,b)=>a.timestamp-b.timestamp);
+  const latest = periods.filter(period => Math.floor(period.timestamp / 86400) === latestDay).sort((a,b) => a.timestamp-b.timestamp);
+  if (periodicity === "hourly") {
+    return {
+      available: true, periods: latest, date: new Date(latestDay * 86400 * 1000).toISOString(),
+      source: "Atlantic hourly consumption", scope: "setup", diagnostics: parsed.diagnostics
+    };
+  }
+  const sum = (mode?: number) => Number(latest.filter(period => mode === undefined || period.mode === mode)
+    .reduce((total, period) => total + period.quantityKwh, 0).toFixed(3));
+  const hasTariffs = latest.some(period => period.mode === 1) && latest.some(period => period.mode === 2);
   return {
-    available: true,
-    periods: latest,
-    date: new Date(latestDay * 86400 * 1000).toISOString(),
-    source: "Atlantic hourly consumption",
-    scope: "setup"
+    available: true, totalKwh: sum(), peakKwh: hasTariffs ? sum(1) : null,
+    offPeakKwh: hasTariffs ? sum(2) : null, date: new Date(latestDay * 86400 * 1000).toISOString(),
+    source: "Atlantic daily consumption", scope: "setup", diagnostics: parsed.diagnostics
   };
+}
+
+export async function getDailySetupConsumption() {
+  return getSetupConsumption("daily");
+}
+
+export async function getHourlySetupConsumption() {
+  return getSetupConsumption("hourly");
 }
 
 export function readInstantPowerW(rawStates: Record<string, unknown>[]) {
