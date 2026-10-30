@@ -82,7 +82,7 @@ export async function GET() {
           hourlyEnergy: hourlyEnergyResult,
           instantaneousPowerW: readInstantPowerW([
             ...(heaterReading?.raw ?? []),
-            ...(powerSensor ? stateByUrl.get(powerSensor.deviceURL)?.raw ?? [] : [])
+            ...sensors.flatMap(device => stateByUrl.get(device.deviceURL)?.raw ?? [])
           ]),
           energyTariffs: energySensor ? Object.fromEntries(
             Object.entries(stateByUrl.get(energySensor.deviceURL)?.states ?? {}).filter(([key]) => key.startsWith("ConsumptionTariff"))
