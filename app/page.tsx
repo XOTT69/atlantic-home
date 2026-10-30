@@ -22,6 +22,7 @@ export default function HomePage() {
   const [heaterStates, setHeaterStates] = useState<Record<string, unknown>>({});
   const [controlBusy, setControlBusy] = useState(false);
   const [gatewayOnline, setGatewayOnline] = useState(false);
+  const [deviceStatus, setDeviceStatus] = useState<"online" | "offline" | "unknown">("unknown");
   const [controlError, setControlError] = useState("");
   const [selectedDay, setSelectedDay] = useState(0);
   const [liveDevice, setLiveDevice] = useState<{name:string; modelId:string|null; isAvailable:boolean|null} | null>(null);
@@ -42,6 +43,7 @@ export default function HomePage() {
         const states = heater?.states ?? {};
         setHeaterStates(states);
         setGatewayOnline(data?.gatewayOnline === true);
+        setDeviceStatus(data?.deviceStatus === "online" ? "online" : data?.deviceStatus === "offline" ? "offline" : "unknown");
         const target = Number(readValue(states.TargetTemperature));
         if (Number.isFinite(target) && target >= 7 && target <= 30) setTemperature(target);
         const onOff = String(readValue(states.OnOff));
@@ -59,7 +61,7 @@ export default function HomePage() {
         });
         setControlError("");
       } catch {
-        if (active) setLiveDevice(null);
+        if (active) { setLiveDevice(null); setDeviceStatus("unknown"); setGatewayOnline(false); }
       } finally {
         if (active) setLiveLoading(false);
       }
@@ -87,6 +89,7 @@ export default function HomePage() {
         const states = fresh?.heater?.states ?? {};
         setHeaterStates(states);
         setGatewayOnline(fresh?.gatewayOnline === true);
+        setDeviceStatus(fresh?.deviceStatus === "online" ? "online" : fresh?.deviceStatus === "offline" ? "offline" : "unknown");
         const target = Number(states.TargetTemperature);
         if (Number.isFinite(target)) setTemperature(target);
         setPower(String(states.OnOff) === "on");
@@ -108,7 +111,7 @@ export default function HomePage() {
           <span>atlantic<span className="brand-light">home</span></span>
         </a>
         <div className="top-actions">
-          <span className="demo-pill"><span /> {liveLoading ? "З’ЄДНАННЯ" : liveDevice ? "COZYTOUCH" : "НЕ ПІДКЛЮЧЕНО"}</span>
+          <span className="demo-pill"><span /> {liveLoading ? "ПЕРЕВІРКА" : deviceStatus === "online" ? "ОНЛАЙН" : deviceStatus === "offline" ? "ОФЛАЙН" : liveDevice ? "СТАН НЕВІДОМИЙ" : "НЕ ПІДКЛЮЧЕНО"}</span>
           <button className="icon-button" aria-label="Налаштування" onClick={() => setTab("settings")}><Settings2 size={19}/></button>
         </div>
       </header>
@@ -125,7 +128,7 @@ export default function HomePage() {
               <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>{liveDevice?.name ?? "Atlantic Altis Eco Boost"}</strong><small>Конвектор · 1000 Вт · {liveDevice ? "Cozytouch" : "очікує з’єднання"}</small></div></div>
               <button className="more-button" aria-label="Додатково"><MoreHorizontal size={21}/></button>
             </div>
-            <div className="device-status"><span className={liveDevice?.isAvailable ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : liveDevice ? (liveDevice.isAvailable === false ? "Пристрій зараз недоступний" : gatewayOnline ? "Конвектор і шлюз на зв’язку" : "Шлюз Cozytouch не в мережі") : "Немає активного з’єднання з пристроєм"}</div>
+            <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}</div>
             <div className="temperature-area">
               <div className="temp-ring">
                 <div className="temp-inner">
@@ -135,8 +138,8 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="temp-controls">
-                <button disabled={controlBusy || !gatewayOnline || temperature <= 7} onClick={() => sendControl("temperature", Math.max(7, temperature - 0.5))} aria-label="Зменшити температуру">−</button>
-                <button disabled={controlBusy || !gatewayOnline || temperature >= 30} onClick={() => sendControl("temperature", Math.min(30, temperature + 0.5))} aria-label="Збільшити температуру">+</button>
+                <button disabled={controlBusy || deviceStatus !== "online" || temperature <= 7} onClick={() => sendControl("temperature", Math.max(7, temperature - 0.5))} aria-label="Зменшити температуру">−</button>
+                <button disabled={controlBusy || deviceStatus !== "online" || temperature >= 30} onClick={() => sendControl("temperature", Math.min(30, temperature + 0.5))} aria-label="Збільшити температуру">+</button>
               </div>
             </div>
             <div className="range-wrap">
@@ -146,18 +149,18 @@ export default function HomePage() {
             <div className="device-divider"/>
             <div className="device-bottom">
               <div className="mode-block"><span>РЕЖИМ РОБОТИ</span><div className="mode-select">
-                {[{label:"Комфорт",value:"normal"},{label:"ECO",value:"eco"},{label:"Антизамерзання",value:"antifreeze"}].map(item => <button key={item.value} className={mode === item.value ? "selected" : ""} disabled={controlBusy || !gatewayOnline} onClick={()=>sendControl("mode", item.value)}>{item.label}</button>)}
+                {[{label:"Комфорт",value:"normal"},{label:"ECO",value:"eco"},{label:"Антизамерзання",value:"antifreeze"}].map(item => <button key={item.value} className={mode === item.value ? "selected" : ""} disabled={controlBusy || deviceStatus !== "online"} onClick={()=>sendControl("mode", item.value)}>{item.label}</button>)}
               </div></div>
-              <button className={power ? "power-button power-active" : "power-button"} disabled={controlBusy || !gatewayOnline || liveDevice?.isAvailable === false} onClick={()=>sendControl("power", !power)} aria-label={power ? "Вимкнути конвектор" : "Увімкнути конвектор"}><Power size={20}/></button>
+              <button className={power ? "power-button power-active" : "power-button"} disabled={controlBusy || deviceStatus !== "online"} onClick={()=>sendControl("power", !power)} aria-label={power ? "Вимкнути конвектор" : "Увімкнути конвектор"}><Power size={20}/></button>
             </div>
-            <div className="demo-note"><CircleHelp size={14}/> {controlError || (liveDevice ? (gatewayOnline ? "Керування через Cozytouch. Стан оновлюється кожні 30 секунд." : "Керування заблоковано: шлюз Cozytouch не в мережі.") : "Підключи Cozytouch у налаштуваннях.")}</div>
+            <div className="demo-note"><CircleHelp size={14}/> {controlError || (deviceStatus === "online" ? "Конвектор онлайн. Стан оновлюється кожні 30 секунд." : deviceStatus === "offline" ? "Конвектор офлайн. Керування заблоковано до відновлення зв’язку." : "Очікуємо підтвердження стану конвектора через Cozytouch.")}</div>
           </div>
 
           <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">{liveDevice ? "Дані Cozytouch" : "Немає з'єднання"}</span></div>
           <div className="metrics-grid">
             <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>{roomTemperature === null ? "—" : roomTemperature.toLocaleString("uk-UA")} °C</strong><small>Датчик кімнатної температури</small></div>
             <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Потужність</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")}</strong><small>Лічильник Cozytouch · значення API</small></div>
-            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{liveDevice ? "Cozytouch" : "Не підключено"}</strong><small>{liveDevice ? "Пристрій знайдено" : "Потрібна авторизація"}</small></div>
+            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{deviceStatus === "online" ? "Онлайн" : deviceStatus === "offline" ? "Офлайн" : "Невідомо"}</strong><small>{gatewayOnline ? "Шлюз доступний" : "Шлюз не підтвердив зв’язок"}</small></div>
             <div className="metric-card"><div className="metric-icon violet"><Activity size={17}/></div><span>Нагрівання</span><strong>{String(heaterStates.TargetHeatingLevel ?? "—")}</strong><small>Рівень нагрівання</small></div>
           </div>
 
