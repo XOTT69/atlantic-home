@@ -52,8 +52,6 @@ export async function GET() {
       const energySensor = sensors.find(device => /energy|consumption/i.test(String(device.controllableName ?? "")) ||
         (Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
           ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /energy|consumption/i.test(String(state.qualifiedName ?? "")))));
-      const powerSensor = sensors.find(device => Array.isArray((device.definition as Record<string, unknown> | undefined)?.states) &&
-        ((device.definition as {states: {qualifiedName?: string}[]}).states).some(state => /power|watt|current/i.test(String(state.qualifiedName ?? ""))));
       const sensorValue = (url: unknown, key: string) => {
         if (!url) return null;
         const value = stateByUrl.get(url)?.states?.[key];
