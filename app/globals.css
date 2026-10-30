@@ -32,3 +32,31 @@
 .tariff-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.tariff-breakdown>div{background:#111a14;border:1px solid #344238;border-radius:12px;padding:11px}.tariff-breakdown span{display:block;color:#9eada2;font-size:10px}.tariff-breakdown strong{display:block;color:#f2f5ef;font:700 13px Manrope;margin-top:6px}.tariff-choice{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:15px}.tariff-choice>span{width:100%;font-size:10px;color:#aab7ac;margin-bottom:2px}.tariff-choice button{border:1px solid #405044;background:#202c24;border-radius:20px;padding:8px 12px;font-size:10px;color:#aab7ac}.tariff-choice button.selected{background:var(--lime);border-color:var(--lime);color:#172219;font-weight:700}
 
 .diagnostic-row{border-top:1px solid #ffffff12;padding:9px 0;display:grid;gap:4px}.diagnostic-row strong{font-size:12px;color:#dce8dc}.diagnostic-row small{font-size:10px;line-height:1.45;color:#91a094;overflow-wrap:anywhere}
+
+
+/* Clear, touch-friendly temperature setpoint control */
+.temperature-area{display:none!important}
+.setpoint-control{margin:24px 0 18px;padding:18px 15px 15px;border:1px solid #3b4b3e;border-radius:21px;background:linear-gradient(145deg,#26372b 0%,#1a261f 68%);box-shadow:inset 0 1px 0 #ffffff0b}
+.setpoint-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.setpoint-eyebrow{font-size:9px;font-weight:700;letter-spacing:1.45px;color:#b4c3b4}
+.setpoint-heading p{margin:5px 0 0;font-size:11px;color:#8fa092}
+.setpoint-step{flex:none;border:1px solid #53644f;background:#314331;color:#d6e5c9;border-radius:20px;padding:6px 9px;font-size:9px;font-weight:600}
+.setpoint-main{display:grid;grid-template-columns:54px 1fr 54px;align-items:center;gap:12px;margin:20px 0 18px}
+.setpoint-reading{text-align:center;min-width:0}
+.setpoint-reading strong{display:block;font:700 64px/.95 Manrope,sans-serif;letter-spacing:-4px;color:#f4f7ef;font-variant-numeric:tabular-nums}
+.setpoint-reading strong span{font-size:35px;color:var(--lime);vertical-align:top;margin-left:3px}
+.setpoint-reading small{display:block;margin-top:9px;font-size:8px;letter-spacing:1.2px;color:#93a394}
+.setpoint-button{width:54px;height:54px;border-radius:17px;border:1px solid #50614e;background:#314331;color:#e8f1df;display:grid;place-items:center;box-shadow:0 4px 12px #0002;transition:transform .12s,background .12s}
+.setpoint-button span{font:400 30px/1 'DM Sans',sans-serif;margin-top:-3px}
+.setpoint-button:active:not(:disabled){transform:scale(.94);background:#40563a}
+.setpoint-button.setpoint-plus{background:var(--lime);border-color:var(--lime);color:#172219}
+.setpoint-button:disabled{opacity:.35;cursor:not-allowed}
+.setpoint-slider{padding:0 3px}
+.setpoint-slider input{display:block;width:100%;height:9px;margin:0;accent-color:var(--lime);cursor:pointer;touch-action:pan-y}
+.setpoint-scale{display:flex;justify-content:space-between;margin-top:9px;color:#91a092;font-size:10px;font-variant-numeric:tabular-nums}
+.setpoint-context{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid #ffffff12;margin-top:14px;padding-top:12px;color:#91a092;font-size:9px}
+.setpoint-context>span{display:flex;align-items:center;gap:6px}
+.setpoint-context b{color:#dce8d8;font-weight:700}
+.setpoint-live-dot{width:6px;height:6px;border-radius:50%;background:#8ce0b5;box-shadow:0 0 8px #8ce0b566}
+.setpoint-slider input:disabled{opacity:.35;cursor:not-allowed}
+@media(max-width:380px){.setpoint-control{padding:15px 12px}.setpoint-main{grid-template-columns:48px 1fr 48px;gap:8px}.setpoint-button{width:48px;height:48px}.setpoint-reading strong{font-size:58px}}
