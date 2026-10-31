@@ -8,10 +8,12 @@
 - Перевірка шлюзу й конвектора, автоматичне виявлення відновлення зв'язку після офлайн-стану.
 - Оновлення стану приблизно кожні 30 секунд.
 - Накопичений лічильник енергії, локальна добова оцінка та хмарна історія показів для графіка за 7/30 днів.
-- Орієнтовна вартість за введеним користувачем тарифом.
-- Погодинні дані показуються, якщо Atlantic API повертає ці інтервали.
+- Орієнтовна вартість за двозонним тарифом і загальним місячним споживанням житла.
+- Вбудований розклад конвектора можна вмикати та ставити на паузу через режими PROG/Manual Cozytouch.
+- Редагований список пристроїв із синхронізацією через Neon.
 - Миттєва потужність у W показується лише якщо пристрій повертає окремий стан потужності з однозначною одиницею виміру.
-- Розклад не активовано: годинник конвектора може скидатися під час знеструмлення.
+- Збір енергії у фоні запускається GitHub Actions за розкладом раз на 15 хвилин після додавання `CRON_SECRET` і повторного підключення Cozytouch з refresh token.
+- Mycond Roomer Smart 12 можна додати й редагувати у списку пристроїв; дистанційне керування з Atlantic Home потребує підтвердженого API MYCOND/Tuya.
 
 ## Environment variables
 
@@ -19,8 +21,9 @@
 - `SESSION_PASSWORD` — випадковий секрет не коротше 32 символів. Використовується для шифрування HttpOnly-сесії.
 - `ATLANTIC_APP_PASSWORD` — окремий пароль доступу до вебзастосунку, не коротше 4 символів.
 - `DATABASE_URL` — рядок підключення Neon Postgres; потрібен для хмарної історії енергоспоживання, але не для керування конвектором.
+- `CRON_SECRET` — окремий випадковий секрет не коротше 32 символів; однакове значення потрібно задати у Vercel та GitHub Actions Secrets.
 
-Для `DATABASE_URL` підключи Neon у Vercel Marketplace до проєкту. Після додавання змінної виконай Redeploy. Таблиця історії створюється застосунком автоматично; покази збираються, коли сторінка Atlantic Home відкрита та отримує телеметрію.
+Для `DATABASE_URL` підключи Neon у Vercel Marketplace до проєкту. Після додавання змінної виконай Redeploy. Таблиці створюються застосунком автоматично.
 
 Додай обидві змінні для Production (і Preview, якщо ним користуєшся), потім виконай Redeploy. Не використовуй один і той самий пароль для Cozytouch, SESSION_PASSWORD та ATLANTIC_APP_PASSWORD. Не надсилай ці значення в чат і не додавай їх до Git.
 
@@ -63,4 +66,14 @@ npm run dev
 
 ## Energy history
 
-Energy readings are sampled at fifteen-minute buckets while the app is receiving Cozytouch telemetry. The cumulative counter is the heater sensor reading; daily values are calculated from its deltas. The chart and cost are estimates. Cost uses the tariff entered in the Energy tab, saved locally in that browser. Without `DATABASE_URL`, only the local estimate is available and readings cannot sync across browsers.
+Energy readings are sampled into fifteen-minute buckets by the GitHub Actions workflow and while the app is open. The cumulative counter is the heater sensor reading; daily values are calculated from its deltas. Day/night allocation is estimated between readings, not directly measured by the Atlantic sensor.
+
+## Background collector setup
+
+1. Generate a private random secret of at least 32 characters.
+2. Add it as `CRON_SECRET` in Vercel Project → Settings → Environment Variables (Production), then redeploy.
+3. Add the same value in GitHub repository → Settings → Secrets and variables → Actions → New repository secret → `CRON_SECRET`.
+4. Open Actions → “Collect Atlantic energy history” → Run workflow to check the first collection.
+5. Reconnect Cozytouch in Atlantic Home so the app can request offline access and save the encrypted refresh token to Neon. Without a refresh token, collection stops when the short-lived access token expires.
+
+GitHub schedule events may be delayed, and public repositories can have scheduled workflows disabled after 60 days without repository activity. This is near-continuous sampling, not a utility-grade meter.

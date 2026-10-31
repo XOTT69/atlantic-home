@@ -1,6 +1,7 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { attachCozytouchSessionCookie, getCozytouchSession } from "@/lib/session";
+import { clearBackgroundCredentials } from "@/lib/energy-store";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
   }
   try {
+    await clearBackgroundCredentials();
     const session = await getCozytouchSession();
     session.accessToken = undefined;
     session.expiresAt = undefined;

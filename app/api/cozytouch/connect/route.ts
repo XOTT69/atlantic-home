@@ -1,12 +1,11 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { attachCozytouchSessionCookie, getCozytouchSession } from "@/lib/session";
+import { saveBackgroundCredentials } from "@/lib/energy-store";
+import { ATLANTIC_API as API, ATLANTIC_CLIENT_ID as CLIENT_ID } from "@/lib/atlantic-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const API = "https://apis.groupe-atlantic.com";
-const CLIENT_ID = "Q3RfMUpWeVRtSUxYOEllZkE3YVVOQmpGblpVYToyRWNORHpfZHkzNDJVSnFvMlo3cFNKTnZVdjBh";
 
 function browserResult(title: string, message: string, success = false) {
   const color = success ? "#087f5b" : "#b42318";
@@ -42,25 +41,23 @@ export async function POST(request: Request) {
     }
 
     stage = "atlantic_auth";
-    const form = new URLSearchParams({
+    const makeAuthForm = (requestOfflineAccess: boolean) => new URLSearchParams({
       grant_type: "password",
-      scope: "openid device_" + Math.floor(Date.now() / 1000),
+      scope: `openid ${requestOfflineAccess ? "offline_access " : ""}device_${Math.floor(Date.now() / 1000)}`,
       username: "GA-PRIVATEPERSON/" + email,
       password
     });
-
-    const authResponse = await fetch(API + "/users/token", {
+    const requestToken = (form: URLSearchParams) => fetch(API + "/users/token", {
       method: "POST",
-      headers: {
-        Authorization: "Basic " + CLIENT_ID,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: form,
-      cache: "no-store",
-      signal: AbortSignal.timeout(20000)
+      headers: { Authorization: "Basic " + CLIENT_ID, "Content-Type": "application/x-www-form-urlencoded" },
+      body: form, cache: "no-store", signal: AbortSignal.timeout(20000)
     });
-
-    const token = await authResponse.json().catch(() => null);
+    let authResponse = await requestToken(makeAuthForm(true));
+    let token = await authResponse.json().catch(() => null);
+    if (!authResponse.ok && token?.error === "invalid_scope") {
+      authResponse = await requestToken(makeAuthForm(false));
+      token = await authResponse.json().catch(() => null);
+    }
     if (!authResponse.ok || !token?.access_token || !token?.token_type) {
       console.error("[cozytouch] auth rejected", { status: authResponse.status, error: token?.error ?? null, hasToken: Boolean(token?.access_token), hasTokenType: Boolean(token?.token_type) });
       const invalid = token?.error === "invalid_grant";
@@ -232,6 +229,17 @@ export async function POST(request: Request) {
       if (wantsHtml) return browserResult("Не вдалося прочитати пристрої", message);
       return NextResponse.json({ error: message, stage: "parse_devices", diagnostics: setupDiagnostics }, { status: 502 });
     }
+    let backgroundCredentialsSaved = false;
+    try {
+      backgroundCredentialsSaved = await saveBackgroundCredentials({
+        accessToken: token.access_token,
+        refreshToken: typeof token.refresh_token === "string" ? token.refresh_token : null,
+        expiresAt: session.expiresAt,
+        connectedAt: session.connectedAt
+      });
+    } catch (error) {
+      console.warn("[cozytouch] background credential storage unavailable", error instanceof Error ? error.name : "UnknownError");
+    }
     if (wantsHtml) {
       return await attachCozytouchSessionCookie(
         browserResult("Cozytouch підключено", `Авторизація успішна. Знайдено пристроїв: ${devices.length}. Повернися до застосунку, щоб переглянути дані.`, true),
@@ -243,6 +251,7 @@ export async function POST(request: Request) {
       connected: true,
       deviceCount: devices.length,
       source: usingLegacyApi ? "cozytouch-legacy" : "magellan",
+      backgroundCollectionReady: backgroundCredentialsSaved && typeof token.refresh_token === "string",
       devices: devices.map((device: Record<string, unknown>) => ({
         id: String(device.deviceId ?? device.deviceURL ?? device.oid ?? ""),
         name: String(device.name ?? device.label ?? "Atlantic"),

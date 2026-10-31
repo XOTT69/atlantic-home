@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp, Download,
-  Flame, Gauge, House, Power, Settings2, ShieldCheck, Thermometer, Wifi,
+  Flame, Gauge, House, Power, Settings2, ShieldCheck, Thermometer, Wifi, Wind, Plus, Trash2,
   Zap, RefreshCw
 } from "lucide-react";
 import { buildDailyEnergy, calculateEnergyCost, type EnergyRates } from "@/lib/energy-pricing";
 
-type Tab = "home" | "schedule" | "energy" | "settings";
+type Tab = "home" | "schedule" | "energy" | "devices" | "settings";
 type EnergyDiagnostics = {
   dailyErrorCode?: string | null;
   hourlyErrorCode?: string | null;
@@ -27,8 +27,20 @@ type EnergyDiagnostics = {
 type EnergySnapshot = { at: number; wh: number };
 type EnergyEstimate = { kwh: number; caption: string };
 type EnergyHistorySample = { sampledAt: number; cumulativeEnergyWh: number };
+type ManagedDevice = { id: string; type: "atlantic-heater" | "mycond-roomer-12" | "custom"; name: string; room: string };
+const WEEKLY_PROGRAMS = [
+  ["Понеділок", "MondayTimeProgram"], ["Вівторок", "TuesdayTimeProgram"],
+  ["Середа", "WednesdayTimeProgram"], ["Четвер", "ThursdayTimeProgram"],
+  ["П’ятниця", "FridayTimeProgram"], ["Субота", "SaturdayTimeProgram"],
+  ["Неділя", "SundayTimeProgram"]
+] as const;
 const ENERGY_SNAPSHOT_KEY = "atlantic-home-energy-snapshots-v1";
 const ENERGY_TARIFF_KEY = "atlantic-home-electricity-tariff-v2";
+const DEVICE_LIST_KEY = "atlantic-home-devices-v1";
+const DEFAULT_DEVICES: ManagedDevice[] = [
+  { id: "atlantic-altis", type: "atlantic-heater", name: "Atlantic Altis Eco Boost 3", room: "" },
+  { id: "mycond-roomer-12", type: "mycond-roomer-12", name: "Mycond Roomer Smart 12", room: "" }
+];
 const DEFAULT_ENERGY_RATES: EnergyRates = {
   discountDay: "2.64",
   discountNight: "1.32",
@@ -39,6 +51,24 @@ const DEFAULT_ENERGY_RATES: EnergyRates = {
 function localDateKey(at: number) {
   const date = new Date(at);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function parseManagedDevices(value: unknown): ManagedDevice[] | null {
+  if (!Array.isArray(value) || value.length > 30) return null;
+  const parsed: ManagedDevice[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+    const device = item as Record<string, unknown>;
+    if (typeof device.id !== "string" || typeof device.name !== "string" || typeof device.room !== "string" ||
+      !["atlantic-heater", "mycond-roomer-12", "custom"].includes(String(device.type))) return null;
+    parsed.push({
+      id: device.id,
+      type: device.type as ManagedDevice["type"],
+      name: device.name.slice(0, 64),
+      room: device.room.slice(0, 50)
+    });
+  }
+  return parsed;
 }
 
 function rememberEnergyReading(wh: number, now = Date.now()): EnergyEstimate | null {
@@ -81,6 +111,7 @@ export default function HomePage() {
   const [observedTodayEnergy, setObservedTodayEnergy] = useState<EnergyEstimate | null>(null);
   const [energyHistoryId, setEnergyHistoryId] = useState<string | null>(null);
   const [energyStorage, setEnergyStorage] = useState<"ready" | "not_configured" | "error">("not_configured");
+  const [backgroundCollection, setBackgroundCollection] = useState<"checking" | "ready" | "reconnect" | "unavailable" | "error">("checking");
   const [energyHistory, setEnergyHistory] = useState<EnergyHistorySample[]>([]);
   const [energyChartDays, setEnergyChartDays] = useState<7 | 30>(7);
   const [energyRates, setEnergyRates] = useState<EnergyRates>(DEFAULT_ENERGY_RATES);
@@ -89,6 +120,10 @@ export default function HomePage() {
   const [rateReady, setRateReady] = useState(false);
   const [tariffSync, setTariffSync] = useState<"idle" | "ready" | "error">("idle");
   const [tariffSaveError, setTariffSaveError] = useState(false);
+  const [managedDevices, setManagedDevices] = useState<ManagedDevice[]>(DEFAULT_DEVICES);
+  const [deviceConfigReady, setDeviceConfigReady] = useState(false);
+  const [deviceConfigSync, setDeviceConfigSync] = useState<"idle" | "ready" | "error">("idle");
+  const [deviceSaveError, setDeviceSaveError] = useState(false);
   const [energyDate, setEnergyDate] = useState<string | null>(null);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
   const [energyDiagnostics, setEnergyDiagnostics] = useState<EnergyDiagnostics | null>(null);
@@ -169,6 +204,20 @@ export default function HomePage() {
     return () => { active = false; };
   }, [energyHistoryId, energyStorage]);
   useEffect(() => {
+    if (!energyHistoryId || energyStorage !== "ready") return;
+    let active = true;
+    fetch("/api/cozytouch/background", { cache: "no-store", credentials: "same-origin" })
+      .then(async response => {
+        if (!response.ok) throw new Error("background_status_unavailable");
+        return response.json();
+      })
+      .then(data => {
+        if (active) setBackgroundCollection(data?.refreshAvailable ? "ready" : data?.configured ? "reconnect" : "unavailable");
+      })
+      .catch(() => { if (active) setBackgroundCollection("error"); });
+    return () => { active = false; };
+  }, [energyHistoryId, energyStorage]);
+  useEffect(() => {
     if (tariffSync !== "ready" || !energyHistoryId) return;
     const timer = window.setTimeout(() => {
       fetch("/api/cozytouch/energy/settings", {
@@ -181,6 +230,47 @@ export default function HomePage() {
     }, 500);
     return () => window.clearTimeout(timer);
   }, [tariffSync, energyHistoryId, energyRates, winterDiscountEnabled, householdMonthlyKwh]);
+  useEffect(() => {
+    try {
+      const parsed = parseManagedDevices(JSON.parse(window.localStorage.getItem(DEVICE_LIST_KEY) ?? "null"));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate the device list from browser storage.
+      if (parsed) setManagedDevices(parsed);
+    } catch { /* Use the default device list. */ }
+    setDeviceConfigReady(true);
+  }, []);
+  useEffect(() => {
+    if (deviceConfigReady) window.localStorage.setItem(DEVICE_LIST_KEY, JSON.stringify(managedDevices));
+  }, [managedDevices, deviceConfigReady]);
+  useEffect(() => {
+    if (!energyHistoryId || energyStorage !== "ready") return;
+    let active = true;
+    fetch(`/api/cozytouch/devices?installationId=${encodeURIComponent(energyHistoryId)}`, { cache: "no-store", credentials: "same-origin" })
+      .then(async response => {
+        if (!response.ok) throw new Error("device_list_unavailable");
+        return response.json();
+      })
+      .then(data => {
+        if (!active) return;
+        if (data?.configured) {
+          const parsed = parseManagedDevices(data.devices);
+          if (parsed) setManagedDevices(parsed);
+        }
+        setDeviceConfigSync("ready");
+      })
+      .catch(() => { if (active) setDeviceConfigSync("error"); });
+    return () => { active = false; };
+  }, [energyHistoryId, energyStorage]);
+  useEffect(() => {
+    if (deviceConfigSync !== "ready" || !energyHistoryId) return;
+    const timer = window.setTimeout(() => {
+      fetch("/api/cozytouch/devices", {
+        method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ installationId: energyHistoryId, devices: managedDevices })
+      }).then(response => { if (!response.ok) throw new Error("device_save_failed"); setDeviceSaveError(false); })
+        .catch(() => setDeviceSaveError(true));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [deviceConfigSync, energyHistoryId, managedDevices]);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -326,7 +416,15 @@ export default function HomePage() {
   const largestEnergyGapMinutes = energyHistory.reduce((largest, sample, index) => index === 0
     ? largest
     : Math.max(largest, (sample.sampledAt - energyHistory[index - 1].sampledAt) / 60_000), 0);
+  const mainHeaterConfig = managedDevices.find(device => device.type === "atlantic-heater");
   const chartMaxKwh = Math.max(...energyDailySeries.map(day => day.kwh), 0.001);
+  const scheduleEnabled = String(mode).toLowerCase() === "prog";
+
+  function programSummary(value: unknown) {
+    if (value === undefined || value === null) return "Не передано пристроєм";
+    if (typeof value === "string") return value;
+    try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+  }
 
   function exportEnergyCsv() {
     const rows = [["Дата", "Споживання, кВт·год", "День, кВт·год", "Ніч, кВт·год", "Орієнтовна вартість, грн"]];
@@ -347,6 +445,24 @@ export default function HomePage() {
     link.download = `atlantic-energy-${energyChartDays}-days.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  function updateManagedDevice(id: string, patch: Partial<ManagedDevice>) {
+    setManagedDevices(previous => previous.map(device => device.id === id ? { ...device, ...patch } : device));
+  }
+
+  function addManagedDevice(type: ManagedDevice["type"]) {
+    const names: Record<ManagedDevice["type"], string> = {
+      "atlantic-heater": "Конвектор Atlantic",
+      "mycond-roomer-12": "Mycond Roomer Smart 12",
+      custom: "Новий пристрій"
+    };
+    setManagedDevices(previous => [...previous, {
+      id: `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      name: names[type],
+      room: ""
+    }]);
   }
 
   return (
@@ -373,7 +489,7 @@ export default function HomePage() {
           {!gatewayOnline && !liveLoading && <div className="tip-card"><div className="tip-icon"><Wifi size={20}/></div><div><strong>Шлюз Cozytouch недоступний</strong><p>Можливе знеструмлення або втрата інтернету. Стан конвектора поки не підтверджено. Після відновлення зв’язку перевіримо його автоматично.</p></div></div>}
           <div className="device-card">
             <div className="device-head">
-              <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>{liveDevice?.name ?? "Atlantic Altis Eco Boost"}</strong><small>Конвектор · 1000 Вт · {liveDevice ? "Cozytouch" : "очікує з’єднання"}</small></div></div>
+              <div className="device-name"><span className="device-icon"><Flame size={18}/></span><div><strong>{mainHeaterConfig?.name ?? liveDevice?.name ?? "Atlantic Altis Eco Boost"}</strong><small>Конвектор · 1000 Вт{mainHeaterConfig?.room ? ` · ${mainHeaterConfig.room}` : ""} · {liveDevice ? "Cozytouch" : "очікує з’єднання"}</small></div></div>
               <button className="more-button" aria-label="Оновити стан" title="Оновити стан" disabled={liveLoading} onClick={()=>{setLiveLoading(true);setRefreshTick(value=>value+1);}}><RefreshCw size={18} className={liveLoading ? "spin" : ""}/></button>
             </div>
             <div className="device-status"><span className={deviceStatus === "online" ? "status-dot active" : "status-dot"}/>{liveLoading ? "Перевіряємо зв’язок…" : deviceStatus === "online" ? "Конвектор онлайн · зв’язок підтверджено" : deviceStatus === "offline" ? "Конвектор офлайн · немає зв’язку зі шлюзом або пристроєм" : liveDevice ? "Не вдалося достовірно визначити стан конвектора" : "Немає зв’язку з Cozytouch · стан невідомий"}{lastUpdatedAt && !liveLoading ? <small className="state-updated">Оновлено {new Date(lastUpdatedAt).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</small> : null}</div>
@@ -431,11 +547,17 @@ export default function HomePage() {
 
         {tab === "schedule" && <div className="subpage">
           <p className="eyebrow">АВТОМАТИЗАЦІЯ</p><h1>Твій розклад<span>.</span></h1>
-          <p className="subcopy">Поки не вмикаємо автоматичний розклад: після знеструмлення годинник конвектора може скидатися, а це здатне змістити час нагрівання.</p>
+          <p className="subcopy">Перемикач використовує вбудований режим PROG конвектора. Сам конвектор виконує збережену в Cozytouch програму навіть коли застосунок закритий.</p>
           <div className="schedule-card">
-            <div className="schedule-title"><CalendarDays size={19}/><strong>Розклад нагрівання</strong><span className="muted-tag">На паузі</span></div>
-            <div className="empty-caption">Спочатку перевіримо, чи можна надійно синхронізувати час конвектора через Cozytouch. До цього жодних автоматичних команд за часом не надсилатимемо.</div>
-            <button className="wide-outline" onClick={()=>setTab("home")}>Повернутися до керування <ArrowUpRight size={16}/></button>
+            <div className="schedule-title"><CalendarDays size={19}/><strong>Розклад нагрівання</strong><span className="muted-tag">{scheduleEnabled ? "Активний" : "На паузі"}</span></div>
+            <p className="subcopy">{scheduleEnabled ? "Конвектор працює за тижневою програмою." : "Розклад збережений, але зараз конвектор працює в ручному режимі."}</p>
+            <button className={scheduleEnabled ? "wide-outline schedule-toggle active" : "wide-outline schedule-toggle"} disabled={controlBusy || deviceStatus !== "online"} onClick={()=>sendControl("mode", scheduleEnabled ? "manual" : "prog")}>
+              {scheduleEnabled ? "Вимкнути розклад · перейти в ручний режим" : "Увімкнути розклад · режим PROG"}
+            </button>
+            <div className="schedule-device-state">Стан Cozytouch: <strong>{String(mode).toUpperCase()}</strong>{deviceStatus !== "online" ? " · потрібне активне з’єднання з конвектором" : ""}</div>
+            {controlError && <p className="tariff-warning">{controlError}</p>}
+            <details className="program-readback"><summary>Переглянути програму, збережену в конвекторі</summary>{WEEKLY_PROGRAMS.map(([label,key])=><div className="program-day" key={key}><strong>{label}</strong><pre>{programSummary(heaterStates[key])}</pre></div>)}</details>
+            <p className="hourly-note">Перемикач лише вмикає або ставить на паузу наявну програму. Редагування часових інтервалів і температур потребує окремої перевірки формату команд Cozytouch.</p>
           </div>
         </div>}
 
@@ -444,6 +566,7 @@ export default function HomePage() {
           <p className="subcopy">Лічильник конвектора показує накопичені Вт·год. Історія й оцінка вартості оновлюються, коли застосунок зчитує Cozytouch.</p>
           <div className="energy-card"><div className="energy-top"><div><span>НАКОПИЧЕНО ЛІЧИЛЬНИКОМ КОНВЕКТОРА</span><strong>{cumulativeEnergyKwh === null ? "—" : cumulativeEnergyKwh.toLocaleString("uk-UA",{minimumFractionDigits:1,maximumFractionDigits:1})} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{cumulativeEnergyKwh === null ? "Лічильник поки не передав значення." : "Загальний показник датчика Atlantic · " + Math.round(cumulativeEnergyKwh * 1000).toLocaleString("uk-UA") + " Вт·год"}</div></div>
           <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>{todayEnergyEstimate ? todayEnergyEstimate.kwh.toLocaleString("uk-UA",{minimumFractionDigits:3,maximumFractionDigits:3}) : "—"} <small>кВт·год</small></strong></div><span className="muted-tag">Оцінка лічильника</span></div><div className="empty-caption">{todayEnergyEstimate?.caption ?? "Потрібно щонайменше два збережені покази лічильника."}</div>{energyConsumption !== null && <p className="hourly-note">Звіт Atlantic за добу: {energyConsumption.toLocaleString("uk-UA")} кВт·год{energyDate ? " · " + new Date(energyDate).toLocaleDateString("uk-UA") : ""}.</p>}</div>
+          <div className="energy-card background-collection-card"><div className="energy-top"><div><span>ФОНОВИЙ ЗБІР ПОКАЗІВ</span><strong style={{fontSize:18}}>{backgroundCollection === "ready" ? "Токен готовий" : backgroundCollection === "reconnect" ? "Потрібне перепідключення" : backgroundCollection === "unavailable" ? "Не налаштовано" : backgroundCollection === "error" ? "Помилка перевірки" : "Перевіряємо…"}</strong></div><span className="muted-tag">GitHub Actions</span></div><p className="hourly-note">{backgroundCollection === "ready" ? "Refresh token збережений зашифровано в Neon. Для запуску кожні 15 хвилин додай однаковий CRON_SECRET у GitHub Actions і Vercel." : backgroundCollection === "reconnect" ? "У Cozytouch немає refresh token. Перепідключи акаунт після оновлення, щоб дозволити фонове оновлення сесії." : backgroundCollection === "unavailable" ? "Спочатку потрібні Neon, підключений Cozytouch і секрет CRON_SECRET у Vercel та GitHub." : backgroundCollection === "error" ? "Не вдалося прочитати стан фонового доступу." : "Статус з’явиться після зчитування Cozytouch."}</p><a className="background-actions-link" href="https://github.com/XOTT69/atlantic-home/actions" target="_blank" rel="noreferrer">Перевірити запуск збору в GitHub Actions <ArrowUpRight size={14}/></a></div>
           <div className="energy-card" style={{marginTop:12}}>
             <div className="energy-top"><div><span>ІСТОРІЯ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>За {energyChartDays} днів</strong></div><span className="muted-tag">{energyHistory.length} показів</span></div>
             <div className="energy-period-choice"><button className={energyChartDays === 7 ? "selected" : ""} onClick={()=>setEnergyChartDays(7)}>7 днів</button><button className={energyChartDays === 30 ? "selected" : ""} onClick={()=>setEnergyChartDays(30)}>30 днів</button><button className="energy-export" onClick={exportEnergyCsv} disabled={energyHistory.length < 2}><Download size={14}/> CSV</button></div>
@@ -471,9 +594,23 @@ export default function HomePage() {
           </details>}
         </div>}
 
+        {tab === "devices" && <div className="subpage">
+          <p className="eyebrow">ТВІЙ ДІМ</p><h1>Пристрої<span>.</span></h1>
+          <p className="subcopy">Редагуй назви й кімнати. Список зберігається в Neon і синхронізується між браузерами.</p>
+          <div className="managed-device-list">{managedDevices.map(device=><article className="managed-device-card" key={device.id}>
+            <div className="managed-device-heading"><span className="device-icon">{device.type === "mycond-roomer-12" ? <Wind size={18}/> : device.type === "atlantic-heater" ? <Flame size={18}/> : <Settings2 size={18}/>}</span><div><strong>{device.name}</strong><small>{device.type === "atlantic-heater" ? liveDevice ? "Підключено через Cozytouch" : "Atlantic Cozytouch" : device.type === "mycond-roomer-12" ? "Осушувач · MYCOND Wi‑Fi" : "Інший пристрій"}</small></div><button className="device-remove" onClick={()=>setManagedDevices(previous=>previous.filter(item=>item.id!==device.id))} aria-label={`Видалити ${device.name}`}><Trash2 size={16}/></button></div>
+            <label className="tariff-input-label">Назва<input value={device.name} maxLength={64} onChange={event=>updateManagedDevice(device.id,{name:event.target.value})}/></label>
+            <label className="tariff-input-label">Кімната<input value={device.room} maxLength={50} placeholder="Наприклад, спальня" onChange={event=>updateManagedDevice(device.id,{room:event.target.value})}/></label>
+            {device.type === "atlantic-heater" && <button className="wide-outline" onClick={()=>setTab("home")}>Відкрити керування Atlantic <ArrowUpRight size={16}/></button>}
+            {device.type === "mycond-roomer-12" && <div className="device-integration-note"><strong>MYCOND ще не підключений до Atlantic Home</strong><span>Пристрій можна додати до списку й задати кімнату. Щоб показати вологість і керувати осушувачем, потрібен сумісний офіційний API або підтверджена інтеграція Tuya.</span><a href="https://mycond.eu/residential-air-dehumidifiers-roomer-smart-12" target="_blank" rel="noreferrer">Можливості Roomer Smart 12</a></div>}
+          </article>)}</div>
+          <div className="device-add-actions"><button disabled={managedDevices.some(device=>device.type==="atlantic-heater")} onClick={()=>addManagedDevice("atlantic-heater")}><Plus size={16}/> Додати Atlantic</button><button onClick={()=>addManagedDevice("mycond-roomer-12")}><Plus size={16}/> Додати Mycond</button><button onClick={()=>addManagedDevice("custom")}><Plus size={16}/> Інший пристрій</button></div>
+          <p className="hourly-note">{deviceConfigSync === "ready" && !deviceSaveError ? "Зміни синхронізуються через Neon." : deviceConfigSync === "error" || deviceSaveError ? "Не вдалося синхронізувати список; копія лишається в цьому браузері." : "Збереження в хмару активується після підключення Cozytouch і Neon."}</p>
+        </div>}
+
         {tab === "settings" && <div className="subpage">
           <p className="eyebrow">КОНФІГУРАЦІЯ</p><h1>Налаштування<span>.</span></h1>
-          <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>{liveDevice ? "Підключено до Atlantic Home" : "Перевірка підключення"}</small></div><span className="settings-state">{liveDevice ? "Підключено" : "Очікує"}</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>{liveDevice?.name ?? "Altis Eco Boost 3 Wi-Fi · 1000 Вт"}</small></div><span className="settings-state">{liveDevice ? "Знайдено" : "Не перевірено"}</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
+          <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>{liveDevice ? "Підключено до Atlantic Home" : "Перевірка підключення"}</small></div><span className="settings-state">{liveDevice ? "Підключено" : "Очікує"}</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>{mainHeaterConfig?.name ?? liveDevice?.name ?? "Altis Eco Boost 3 Wi-Fi · 1000 Вт"}</small></div><span className="settings-state">{liveDevice ? "Знайдено" : "Не перевірено"}</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
           <button className="disconnect-button" onClick={async()=>{await fetch("/api/access/lock",{method:"POST",credentials:"same-origin"});window.location.reload();}}>Заблокувати Atlantic Home</button>
         </div>}
       </section>
@@ -484,6 +621,7 @@ export default function HomePage() {
         <button className={tab==="home"?"nav-active":""} onClick={()=>setTab("home")}><House size={19}/><span>Дім</span></button>
         <button className={tab==="schedule"?"nav-active":""} onClick={()=>setTab("schedule")}><CalendarDays size={19}/><span>Розклад</span></button>
         <button className={tab==="energy"?"nav-active":""} onClick={()=>setTab("energy")}><Gauge size={19}/><span>Енергія</span></button>
+        <button className={tab==="devices"?"nav-active":""} onClick={()=>setTab("devices")}><Wind size={19}/><span>Пристрої</span></button>
         <button className={tab==="settings"?"nav-active":""} onClick={()=>setTab("settings")}><Settings2 size={19}/><span>Профіль</span></button>
       </nav>
     </main>

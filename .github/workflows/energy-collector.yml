@@ -1,0 +1,33 @@
+name: Collect Atlantic energy history
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atlantic-energy-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read cumulative energy counter
+        env:
+          ATLANTIC_HOME_URL: https://atlantic-home.vercel.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${ATLANTIC_HOME_URL}" || -z "${CRON_SECRET}" ]]; then
+            echo "Set the CRON_SECRET repository secret."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 55 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${ATLANTIC_HOME_URL%/}/api/cron/energy"

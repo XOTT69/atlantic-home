@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { sealData, unsealData } from "iron-session";
 
 type EnergySample = { sampledAt: string | Date; cumulativeWh: string | number };
 type EnergySql = NeonQueryFunction<false, false>;
@@ -33,6 +34,16 @@ async function ensureSchema(sql: EnergySql) {
       await sql`CREATE TABLE IF NOT EXISTS atlantic_energy_tariff_settings (
         installation_id text PRIMARY KEY,
         settings jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT NOW()
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS atlantic_home_devices (
+        installation_id text PRIMARY KEY,
+        devices jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT NOW()
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS atlantic_background_credentials (
+        credential_key text PRIMARY KEY,
+        sealed_payload text NOT NULL,
         updated_at timestamptz NOT NULL DEFAULT NOW()
       )`;
     })().catch(error => {
@@ -98,4 +109,52 @@ export async function saveEnergyTariffSettings(installationId: string, settings:
     VALUES (${installationId}, ${JSON.stringify(settings)}::jsonb, NOW())
     ON CONFLICT (installation_id) DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()`;
   return true;
+}
+
+export async function getHomeDevices(installationId: string) {
+  const sql = getSql();
+  if (!sql || !/^[a-f0-9]{32}$/.test(installationId)) return null;
+  await ensureSchema(sql);
+  const rows = await sql`SELECT devices FROM atlantic_home_devices WHERE installation_id = ${installationId} LIMIT 1` as { devices: unknown }[];
+  return rows[0]?.devices ?? null;
+}
+
+export async function saveHomeDevices(installationId: string, devices: unknown[]) {
+  const sql = getSql();
+  if (!sql || !/^[a-f0-9]{32}$/.test(installationId)) return false;
+  await ensureSchema(sql);
+  await sql`INSERT INTO atlantic_home_devices (installation_id, devices, updated_at)
+    VALUES (${installationId}, ${JSON.stringify(devices)}::jsonb, NOW())
+    ON CONFLICT (installation_id) DO UPDATE SET devices = EXCLUDED.devices, updated_at = NOW()`;
+  return true;
+}
+
+export async function saveBackgroundCredentials(payload: Record<string, unknown>) {
+  const sql = getSql();
+  const password = process.env.SESSION_PASSWORD;
+  if (!sql || !password || password.length < 32) return false;
+  await ensureSchema(sql);
+  const sealedPayload = await sealData(payload, { password });
+  await sql`INSERT INTO atlantic_background_credentials (credential_key, sealed_payload, updated_at)
+    VALUES ('cozytouch', ${sealedPayload}, NOW())
+    ON CONFLICT (credential_key) DO UPDATE SET sealed_payload = EXCLUDED.sealed_payload, updated_at = NOW()`;
+  return true;
+}
+
+export async function getBackgroundCredentials() {
+  const sql = getSql();
+  const password = process.env.SESSION_PASSWORD;
+  if (!sql || !password || password.length < 32) return null;
+  await ensureSchema(sql);
+  const rows = await sql`SELECT sealed_payload FROM atlantic_background_credentials WHERE credential_key = 'cozytouch' LIMIT 1` as { sealed_payload: string }[];
+  const sealedPayload = rows[0]?.sealed_payload;
+  if (!sealedPayload) return null;
+  return await unsealData<Record<string, unknown>>(sealedPayload, { password });
+}
+
+export async function clearBackgroundCredentials() {
+  const sql = getSql();
+  if (!sql) return;
+  await ensureSchema(sql);
+  await sql`DELETE FROM atlantic_background_credentials WHERE credential_key = 'cozytouch'`;
 }
