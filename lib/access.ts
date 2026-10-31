@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
-import { getCozytouchSession } from "@/lib/session";
+import { getCozytouchSession, SESSION_COOKIE_NAME } from "@/lib/session";
 
 export async function getAppAccessDiagnostics() {
   const appPasswordConfigured = Boolean(process.env.ATLANTIC_APP_PASSWORD && process.env.ATLANTIC_APP_PASSWORD.length >= 4);
   const cookieJar = await cookies();
-  const sessionCookiePresent = Boolean(cookieJar.get("atlantic_home_session")?.value);
+  const sessionCookiePresent = Boolean(cookieJar.get(SESSION_COOKIE_NAME)?.value);
   try {
     const session = await getCozytouchSession();
     const appUnlocked = session.appUnlocked === true;

@@ -1,6 +1,6 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
-import { getCozytouchSession } from "@/lib/session";
+import { attachCozytouchSessionCookie, getCozytouchSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -15,8 +15,7 @@ export async function POST(request: Request) {
     session.accessToken = undefined;
     session.expiresAt = undefined;
     session.connectedAt = undefined;
-    await session.save();
-    return NextResponse.json({ connected: false });
+    return await attachCozytouchSessionCookie(NextResponse.json({ connected: false }), session);
   } catch {
     return NextResponse.json({ error: "Не вдалося завершити сесію." }, { status: 500 });
   }

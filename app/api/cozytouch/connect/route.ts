@@ -1,6 +1,6 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
-import { getCozytouchSession } from "@/lib/session";
+import { attachCozytouchSessionCookie, getCozytouchSession } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ const CLIENT_ID = "Q3RfMUpWeVRtSUxYOEllZkE3YVVOQmpGblpVYToyRWNORHpfZHkzNDJVSnFvM
 function browserResult(title: string, message: string, success = false) {
   const color = success ? "#087f5b" : "#b42318";
   const html = `<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${title} · Atlantic Home</title><body style="margin:0;background:#f4f9ff;color:#172b4d;font:16px -apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh;display:grid;place-items:center"><main style="box-sizing:border-box;width:min(92%,440px);padding:28px;border:1px solid #dce8f5;border-radius:24px;background:white;box-shadow:0 12px 40px #163b6412"><div style="font-size:13px;color:#66809e;letter-spacing:.12em;font-weight:700">ATLANTIC HOME</div><h1 style="font-size:24px;margin:18px 0 10px">${title}</h1><p style="line-height:1.55;color:${color}">${message}</p><a href="/" style="display:block;text-align:center;margin-top:24px;padding:14px;border-radius:14px;background:#1769aa;color:white;text-decoration:none;font-weight:600">Повернутися до застосунку</a></main></body></html>`;
-  return new Response(html, { status: success ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  return new NextResponse(html, { status: success ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -74,7 +74,6 @@ export async function POST(request: Request) {
     session.accessToken = token.access_token;
     session.expiresAt = Date.now() + (Number(token.expires_in) || 3600) * 1000 - 60000;
     session.connectedAt = Date.now();
-    await session.save();
 
     stage = "read_devices";
     const setupResponse = await fetch(API + "/magellan/cozytouch/setupviewv2", {
@@ -235,10 +234,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: message, stage: "parse_devices", diagnostics: setupDiagnostics }, { status: 502 });
     }
     if (wantsHtml) {
-      return browserResult("Cozytouch підключено", `Авторизація успішна. Знайдено пристроїв: ${devices.length}. Повернися до застосунку, щоб переглянути дані.`, true);
+      return await attachCozytouchSessionCookie(
+        browserResult("Cozytouch підключено", `Авторизація успішна. Знайдено пристроїв: ${devices.length}. Повернися до застосунку, щоб переглянути дані.`, true),
+        session
+      );
     }
 
-    return NextResponse.json({
+    return await attachCozytouchSessionCookie(NextResponse.json({
       connected: true,
       deviceCount: devices.length,
       source: usingLegacyApi ? "cozytouch-legacy" : "magellan",
@@ -261,7 +263,7 @@ export async function POST(request: Request) {
             })).filter((item: { id: number }) => Number.isFinite(item.id))
           : []
       }))
-    });
+    }), session);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[cozytouch] connection exception", { stage, name: error instanceof Error ? error.name : "UnknownError", message });

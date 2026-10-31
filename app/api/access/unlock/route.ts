@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { getCozytouchSession, getSessionConfigurationError } from "@/lib/session";
+import { attachCozytouchSessionCookie, getCozytouchSession, getSessionConfigurationError } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +27,7 @@ export async function POST(request: Request) {
     if (!valid) return NextResponse.json({ error: "Неправильний пароль доступу." }, { status: 401 });
     const session = await getCozytouchSession();
     session.appUnlocked = true;
-    await session.save();
-    return NextResponse.json({ unlocked: true });
+    return await attachCozytouchSessionCookie(NextResponse.json({ unlocked: true }), session);
   } catch {
     return NextResponse.json({ error: "Не вдалося відкрити захищену сесію." }, { status: 500 });
   }
