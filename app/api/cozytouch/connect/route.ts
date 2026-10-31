@@ -83,7 +83,6 @@ export async function POST(request: Request) {
     });
 
     if (!setupResponse.ok) {
-      session.destroy();
       console.error("[cozytouch] setup request failed", { status: setupResponse.status });
       const message = "Atlantic прийняв авторизацію, але не віддав список пристроїв.";
       if (wantsHtml) return browserResult("Акаунт авторизовано частково", message);

@@ -20,7 +20,8 @@ export async function withOverkiz<T>(
 ): Promise<T> {
   const session = await getCozytouchSession();
   if (!session.accessToken || !session.expiresAt || Date.now() >= session.expiresAt) {
-    session.destroy();
+    // Keep the separate Atlantic Home unlock flag. A missing/expired Cozytouch
+    // token must not sign the user out of the app itself.
     throw new Error("COZYTOUCH_SESSION_EXPIRED");
   }
 
