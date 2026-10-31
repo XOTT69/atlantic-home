@@ -4,8 +4,8 @@
   "description": "Керування конвектором Atlantic Cozytouch",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#101714",
-  "theme_color": "#101714",
+  "background_color": "#f4f8fc",
+  "theme_color": "#f4f8fc",
   "lang": "uk",
   "icons": [
     {
