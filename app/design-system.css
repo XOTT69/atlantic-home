@@ -499,12 +499,16 @@ body { font-size: 15px; line-height: 1.55; }
 .demo-pill { font-size: 11px; }
 .setpoint-step { font-size: 12px; }
 .bottom-nav button { font-size: 11px; }
+.energy-history-column small, .hourly-column small { font-size: 11px; line-height: 1.3; }
+.connected-label { font-size: 11px; }
+.settings-state { font-size: 12px; }
 
 @media (max-width: 380px) {
   .demo-pill { font-size: 10px; }
-  .setpoint-step { max-width: 108px; font-size: 10px; }
+  .setpoint-step { max-width: 108px; font-size: 11px; }
   .metric-card { min-height: 138px; }
   .metric-card > span { font-size: 12px; }
   .metric-card strong { font-size: 16px; }
   .bottom-nav button { font-size: 11px; }
+  .energy-history-column small, .hourly-column small { font-size: 11px; }
 }
