@@ -371,6 +371,102 @@ summary:focus-visible {
 .background-refresh-button:disabled { opacity: .55; cursor: wait; }
 .background-actions-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: var(--accent-dark); font-size: 11px; font-weight: 700; line-height: 1.4; text-decoration: none; }
 
+/* Readability pass: keep supporting text comfortably legible across the app. */
+body { font-size: 15px; line-height: 1.55; }
+.demo-pill { font-size: 10px; letter-spacing: .65px; }
+.eyebrow { font-size: 11px; letter-spacing: 1.25px; line-height: 1.45; }
+.weather-mark { font-size: 12px; }
+.device-name strong { font-size: 14px; line-height: 1.4; }
+.device-name small { font-size: 12px; line-height: 1.5; }
+.device-status { font-size: 13px; line-height: 1.55; }
+.state-updated { font-size: 12px; }
+.setpoint-eyebrow { font-size: 11px; letter-spacing: 1px; }
+.setpoint-heading p { font-size: 13px; line-height: 1.5; }
+.setpoint-step { max-width: none; font-size: 11px; }
+.dial-overline { font-size: 11px; letter-spacing: 1.1px; }
+.setpoint-dial-inner small { font-size: 12px; }
+.setpoint-scale { font-size: 12px; }
+.setpoint-context { font-size: 12px; line-height: 1.5; }
+.mode-block > span { font-size: 11px; letter-spacing: 1px; }
+.mode-select button { min-height: 42px; padding: 9px 12px; font-size: 12px; }
+.demo-note { font-size: 12px; line-height: 1.55; }
+.muted-tag { font-size: 11px; line-height: 1.4; }
+.section-heading h2 { font-size: 19px; }
+.metric-card > span { font-size: 13px; line-height: 1.45; }
+.metric-card strong { font-size: clamp(16px, 4.5vw, 19px); line-height: 1.35; }
+.metric-card small { font-size: 12px; line-height: 1.5; }
+.tip-card strong { font-size: 13px; line-height: 1.5; }
+.tip-card p { font-size: 12px; line-height: 1.6; }
+.bottom-nav button { font-size: 11px; line-height: 1.25; }
+.subcopy { font-size: 14px; line-height: 1.65; }
+.schedule-title strong { font-size: 14px; }
+.day-picker button { font-size: 12px; }
+.schedule-legend { font-size: 12px; line-height: 1.5; }
+.wide-outline { font-size: 13px; line-height: 1.45; }
+.schedule-device-state { font-size: 13px; line-height: 1.6; }
+.program-readback summary { font-size: 13px; line-height: 1.5; }
+.program-day strong { font-size: 13px; }
+.program-day pre { font-size: 12px; line-height: 1.6; }
+.energy-top span { font-size: 12px; letter-spacing: .7px; line-height: 1.5; }
+.energy-top strong small { font-size: 14px; }
+.energy-period-choice button { font-size: 12px; }
+.energy-history-column small, .hourly-column small { font-size: 10px; line-height: 1.2; }
+.empty-caption { font-size: 13px; line-height: 1.6; }
+.hourly-note { font-size: 13px; line-height: 1.65; }
+.tariff-toggle { line-height: 1.55; }
+.tariff-toggle strong { font-size: 13px; line-height: 1.5; }
+.tariff-toggle small, .household-months > small, .household-month-input > small { font-size: 12px; line-height: 1.55; }
+.tariff-input-label { font-size: 13px; line-height: 1.5; }
+.tariff-rate-grid label { font-size: 12px; line-height: 1.45; }
+.tariff-breakdown span { font-size: 12px; line-height: 1.45; }
+.tariff-breakdown strong { font-size: 14px; line-height: 1.4; }
+.tariff-choice > span { font-size: 12px; }
+.tariff-choice button { font-size: 12px; }
+.tariff-warning { font-size: 13px; line-height: 1.6; }
+.energy-diagnostics summary { font-size: 13px; line-height: 1.55; }
+.diagnostic-row strong { font-size: 13px; }
+.diagnostic-row small { font-size: 12px; line-height: 1.55; }
+.managed-device-heading strong { font-size: 15px; line-height: 1.45; }
+.managed-device-heading small { font-size: 12px; line-height: 1.5; }
+.device-integration-note { font-size: 13px; line-height: 1.6; }
+.device-integration-note strong { font-size: 14px; line-height: 1.5; }
+.device-integration-note a { font-size: 13px; }
+.mycond-readings > div { font-size: 12px; line-height: 1.45; }
+.mycond-readings strong { font-size: 14px; line-height: 1.4; }
+.mycond-control-button { font-size: 13px; }
+.mycond-control-field { font-size: 13px; line-height: 1.5; }
+.device-add-actions button { font-size: 13px; line-height: 1.45; }
+.live-connect-head strong { font-size: 15px; line-height: 1.45; }
+.live-connect-head small, .detected-device small { font-size: 12px; line-height: 1.5; }
+.connected-label { font-size: 10px; letter-spacing: .5px; }
+.detected-device strong { font-size: 14px; line-height: 1.45; }
+.device-online, .device-offline { font-size: 12px; }
+.connect-description { font-size: 13px; line-height: 1.65; }
+.connect-form label { font-size: 13px; line-height: 1.5; }
+.connect-submit { font-size: 14px; }
+.form-error { font-size: 13px; line-height: 1.5; }
+.security-note { font-size: 12px; line-height: 1.5; }
+.disconnect-button { font-size: 13px; line-height: 1.45; }
+.connection-meta { font-size: 12px; line-height: 1.5; }
+.capability-details summary { font-size: 13px; line-height: 1.5; }
+.capability-list > div { font-size: 12px; line-height: 1.5; }
+.copy-diagnostics { font-size: 13px; }
+.background-setup-button, .background-refresh-button { font-size: 12px; line-height: 1.45; }
+.background-actions-link { font-size: 12px; line-height: 1.5; }
+.settings-row strong { font-size: 14px; line-height: 1.45; }
+.settings-row small { font-size: 12px; line-height: 1.5; }
+.settings-state { font-size: 11px; }
+
+@media (max-width: 380px) {
+  .demo-pill { font-size: 10px; }
+  .setpoint-step { max-width: 108px; font-size: 10px; }
+  .metric-card { min-height: 138px; }
+  .metric-card > span { font-size: 12px; }
+  .metric-card strong { font-size: 16px; }
+  .bottom-nav button { font-size: 11px; }
+  .energy-history-column small { font-size: 10px; }
+}
+
 @media (max-width: 380px) {
   .topbar { height: 60px; padding-inline: 14px; }
   .brand { gap: 8px; font-size: 15px; }
@@ -397,4 +493,18 @@ summary:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Keep readability overrides last so older responsive rules cannot shrink text again. */
+.demo-pill { font-size: 11px; }
+.setpoint-step { font-size: 12px; }
+.bottom-nav button { font-size: 11px; }
+
+@media (max-width: 380px) {
+  .demo-pill { font-size: 10px; }
+  .setpoint-step { max-width: 108px; font-size: 10px; }
+  .metric-card { min-height: 138px; }
+  .metric-card > span { font-size: 12px; }
+  .metric-card strong { font-size: 16px; }
+  .bottom-nav button { font-size: 11px; }
 }
