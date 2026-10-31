@@ -145,3 +145,13 @@ body{background:radial-gradient(ellipse at 50% -15%,#e2f0ff 0%,#f3f7fc 58%);back
 .tariff-choice button.selected{background:#4b9de8;border-color:#4b9de8;color:#fff}
 .hourly-chart{border-color:#dce7f2;background:repeating-linear-gradient(to bottom,transparent 0,transparent 32px,#5c8bb512 33px)}
 .hourly-bar{background:linear-gradient(180deg,#69b8f1,#3689d0)}
+.tariff-toggle{display:flex;align-items:flex-start;gap:11px;margin-top:17px;padding:13px;border:1px solid #dce7f2;border-radius:13px;background:#f7fbff;color:#365a78;cursor:pointer}
+.tariff-toggle input{width:19px;height:19px;margin:1px 0 0;accent-color:#3188d4;flex:none}
+.tariff-toggle span{display:grid;gap:5px}.tariff-toggle strong{font-size:12px}.tariff-toggle small,.household-months>small{color:#71839a;font-size:11px;line-height:1.45}
+.household-months,.tariff-rates{display:grid;gap:8px;margin-top:16px}.household-months>strong,.tariff-rates>strong{color:#274965;font-size:12px}.household-months .tariff-input-label{margin-top:4px}
+.household-month-input{display:grid;gap:5px}.household-month-input>small{font-size:11px;color:#71839a;line-height:1.4}
+.tariff-rate-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.tariff-rate-grid label{display:grid;gap:6px;color:#607991;font-size:11px}.tariff-rate-grid input{min-width:0;width:100%;border:1px solid #d4e2f0;background:#f7faff;color:#172b45;border-radius:10px;padding:10px;font-size:14px;outline:none}.tariff-rate-grid input:focus{border-color:#4b9de8;box-shadow:0 0 0 3px #4b9de81a}
+.tariff-warning{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:#fff6e5;color:#8a5b14;font-size:12px;line-height:1.45}
+.energy-period-choice button,.bottom-nav button,.mode-select button,.power-button{min-height:44px}
+.energy-period-choice .energy-export{display:inline-flex;align-items:center;gap:6px;margin-left:auto;background:#fff;border-color:#cbdbea;color:#347fbf}.energy-period-choice .energy-export:disabled{opacity:.45;cursor:not-allowed}
+.energy-top span,.metric-card>span,.metric-card small,.hourly-note,.empty-caption,.tariff-toggle small{font-size:max(11px, 0.72rem)}

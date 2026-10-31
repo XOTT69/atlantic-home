@@ -1,6 +1,6 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
-import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption, getHourlySetupConsumption, readInstantPowerW } from "@/lib/overkiz";
+import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption, readInstantPowerW } from "@/lib/overkiz";
 import { saveEnergySample } from "@/lib/energy-store";
 
 export const runtime = "nodejs";
@@ -47,10 +47,14 @@ export async function GET() {
           return { available: false, errorCode, errorDetails };
         }
       };
-      const [dailyEnergyResult, hourlyEnergyResult] = await Promise.all([
-        energyResult(getDailySetupConsumption),
-        energyResult(getHourlySetupConsumption)
-      ]);
+      const dailyEnergyResult = await energyResult(getDailySetupConsumption);
+      // Atlantic rejects `hourly` with BadParameter (43000006) for this heater.
+      // Keep the diagnostic explicit without repeating a known-failing request on every poll.
+      const hourlyEnergyResult = {
+        available: false,
+        errorCode: "ATLANTIC_HOURLY_UNSUPPORTED",
+        errorDetails: "Atlantic Cozytouch відхиляє periodicity=hourly (43000006). Використовуємо дельти накопичувального лічильника."
+      };
       const heaterReading = stateByUrl.get(heater.deviceURL);
       const temperatureSensor = sensors.find(device => String(device.controllableName ?? "").includes("TemperatureInCelcius"));
       const energySensor = sensors.find(device => /energy|consumption/i.test(String(device.controllableName ?? "")) ||
