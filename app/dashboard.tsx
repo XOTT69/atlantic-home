@@ -87,6 +87,8 @@ export default function HomePage() {
   const [winterDiscountEnabled, setWinterDiscountEnabled] = useState(true);
   const [householdMonthlyKwh, setHouseholdMonthlyKwh] = useState<Record<string, string>>({});
   const [rateReady, setRateReady] = useState(false);
+  const [tariffSync, setTariffSync] = useState<"idle" | "ready" | "error">("idle");
+  const [tariffSaveError, setTariffSaveError] = useState(false);
   const [energyDate, setEnergyDate] = useState<string | null>(null);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
   const [energyDiagnostics, setEnergyDiagnostics] = useState<EnergyDiagnostics | null>(null);
@@ -133,6 +135,52 @@ export default function HomePage() {
   useEffect(() => {
     if (rateReady) window.localStorage.setItem(ENERGY_TARIFF_KEY, JSON.stringify({ rates: energyRates, winterDiscountEnabled, householdMonthlyKwh }));
   }, [energyRates, winterDiscountEnabled, householdMonthlyKwh, rateReady]);
+  useEffect(() => {
+    if (!energyHistoryId || energyStorage !== "ready") return;
+    let active = true;
+    fetch(`/api/cozytouch/energy/settings?installationId=${encodeURIComponent(energyHistoryId)}`, { cache: "no-store", credentials: "same-origin" })
+      .then(async response => {
+        if (!response.ok) throw new Error("tariff_settings_unavailable");
+        return response.json();
+      })
+      .then(data => {
+        if (!active) return;
+        const saved = data?.settings;
+        if (saved && typeof saved === "object") {
+          if (saved.rates && typeof saved.rates === "object") {
+            const next = { ...DEFAULT_ENERGY_RATES };
+            for (const key of Object.keys(DEFAULT_ENERGY_RATES) as (keyof EnergyRates)[]) {
+              if (typeof saved.rates[key] === "string") next[key] = saved.rates[key];
+            }
+            setEnergyRates(next);
+          }
+          if (typeof saved.winterDiscountEnabled === "boolean") setWinterDiscountEnabled(saved.winterDiscountEnabled);
+          if (saved.householdMonthlyKwh && typeof saved.householdMonthlyKwh === "object") {
+            const monthly: Record<string, string> = {};
+            for (const [key, value] of Object.entries(saved.householdMonthlyKwh)) {
+              if (/^\d{4}-(0[1-9]|1[0-2])$/.test(key) && (typeof value === "string" || typeof value === "number")) monthly[key] = String(value);
+            }
+            setHouseholdMonthlyKwh(monthly);
+          }
+        }
+        setTariffSync("ready");
+      })
+      .catch(() => { if (active) setTariffSync("error"); });
+    return () => { active = false; };
+  }, [energyHistoryId, energyStorage]);
+  useEffect(() => {
+    if (tariffSync !== "ready" || !energyHistoryId) return;
+    const timer = window.setTimeout(() => {
+      fetch("/api/cozytouch/energy/settings", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ installationId: energyHistoryId, settings: { rates: energyRates, winterDiscountEnabled, householdMonthlyKwh } })
+      }).then(response => { if (!response.ok) throw new Error("tariff_save_failed"); setTariffSaveError(false); })
+        .catch(() => setTariffSaveError(true));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [tariffSync, energyHistoryId, energyRates, winterDiscountEnabled, householdMonthlyKwh]);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -411,7 +459,7 @@ export default function HomePage() {
             {tariffMonths.length > 0 && <div className="household-months"><strong>Загальне споживання житла</strong><small>Внеси показ з рахунку за кожен зимовий місяць у вибраному періоді. Це визначає, який тариф застосувати до всього обсягу за місяць. Пільговий режим має бути оформлений для твого житла.</small>{tariffMonths.map(monthKey=>{const entered=householdMonthlyKwh[monthKey] ?? "";const total=Number(entered.trim().replace(",","."));const status=entered.trim()===""?"Вкажи показ за місяць, щоб обрати тариф.":Number.isFinite(total)?total<=2000?"Для оцінки застосуємо пільгову ставку.":"Понад 2000 кВт·год: застосуємо стандартну ставку.":"Перевір число.";return <div className="household-month-input" key={monthKey}><label className="tariff-input-label">{new Date(`${monthKey}-01T12:00:00`).toLocaleDateString("uk-UA",{month:"long",year:"numeric"})}, кВт·год<input inputMode="decimal" type="text" placeholder="Наприклад, 1800" value={entered} onChange={event=>setHouseholdMonthlyKwh(previous=>({...previous,[monthKey]:event.target.value.replace(/[^0-9,.]/g,"")}))}/></label><small>{status}</small></div>})}</div>}
             <div className="tariff-rates"><strong>Ціни, грн/кВт·год</strong><div className="tariff-rate-grid"><label>Пільговий · день<input inputMode="decimal" value={energyRates.discountDay} onChange={event=>setEnergyRates(previous=>({...previous,discountDay:event.target.value.replace(/[^0-9,.]/g,"")}))}/></label><label>Пільговий · ніч<input inputMode="decimal" value={energyRates.discountNight} onChange={event=>setEnergyRates(previous=>({...previous,discountNight:event.target.value.replace(/[^0-9,.]/g,"")}))}/></label><label>Стандартний · день<input inputMode="decimal" value={energyRates.standardDay} onChange={event=>setEnergyRates(previous=>({...previous,standardDay:event.target.value.replace(/[^0-9,.]/g,"")}))}/></label><label>Стандартний · ніч<input inputMode="decimal" value={energyRates.standardNight} onChange={event=>setEnergyRates(previous=>({...previous,standardNight:event.target.value.replace(/[^0-9,.]/g,"")}))}/></label></div></div>
             {chartCost === null && energyHistory.length > 1 && tariffEstimate.missingMonths.length > 0 && <p className="tariff-warning">Щоб порахувати вартість за вибраний період, додай загальне споживання житла за зимові місяці вище.</p>}
-            <p className="hourly-note">Оцінка розподіляє приріст накопичувального лічильника рівномірно між двома зчитуваннями. Найдовша пауза між збереженими показами: {largestEnergyGapMinutes < 1 ? "—" : largestEnergyGapMinutes < 60 ? `${Math.round(largestEnergyGapMinutes)} хв` : `${(largestEnergyGapMinutes/60).toLocaleString("uk-UA",{maximumFractionDigits:1})} год`}. Якщо сторінка була закрита, точний розподіл між днем і ніччю невідомий. Налаштування тарифів зберігаються в цьому браузері.</p>
+            <p className="hourly-note">Оцінка розподіляє приріст накопичувального лічильника рівномірно між двома зчитуваннями. Найдовша пауза між збереженими показами: {largestEnergyGapMinutes < 1 ? "—" : largestEnergyGapMinutes < 60 ? `${Math.round(largestEnergyGapMinutes)} хв` : `${(largestEnergyGapMinutes/60).toLocaleString("uk-UA",{maximumFractionDigits:1})} год`}. Якщо сторінка була закрита, точний розподіл між днем і ніччю невідомий. {tariffSync === "ready" && !tariffSaveError ? "Тарифи й загальні місячні покази синхронізуються через Neon." : tariffSync === "error" || tariffSaveError ? "Не вдалося синхронізувати тарифи; копія лишається в цьому браузері." : "Тарифи синхронізуються після підключення історії Neon."}</p>
           </div>
           <div className="metric-card tariff"><span>Миттєва потужність</span><strong>{instantaneousPowerW === null ? "Поки недоступна" : instantaneousPowerW.toLocaleString("uk-UA") + " Вт"}</strong><small>Cozytouch передає накопичену енергію, але не миттєві Вт. Конвектор має номінальну потужність 1000 Вт; це не означає, що він постійно споживає її.</small></div>
           {energyDiagnostics && <details className="energy-card energy-diagnostics" style={{marginTop:12}}>

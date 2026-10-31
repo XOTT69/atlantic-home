@@ -30,6 +30,11 @@ async function ensureSchema(sql: EnergySql) {
       )`;
       await sql`CREATE INDEX IF NOT EXISTS atlantic_energy_samples_time_idx
         ON atlantic_energy_samples (installation_id, sampled_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS atlantic_energy_tariff_settings (
+        installation_id text PRIMARY KEY,
+        settings jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT NOW()
+      )`;
     })().catch(error => {
       schemaReady = null;
       throw error;
@@ -75,4 +80,22 @@ export async function getEnergySamples(installationId: string, days = 32) {
     sampledAt: new Date(row.sampledAt).getTime(),
     cumulativeEnergyWh: Number(row.cumulativeWh)
   })).filter(row => Number.isFinite(row.sampledAt) && Number.isFinite(row.cumulativeEnergyWh));
+}
+
+export async function getEnergyTariffSettings(installationId: string) {
+  const sql = getSql();
+  if (!sql || !/^[a-f0-9]{32}$/.test(installationId)) return null;
+  await ensureSchema(sql);
+  const rows = await sql`SELECT settings FROM atlantic_energy_tariff_settings WHERE installation_id = ${installationId} LIMIT 1` as { settings: unknown }[];
+  return rows[0]?.settings ?? null;
+}
+
+export async function saveEnergyTariffSettings(installationId: string, settings: Record<string, unknown>) {
+  const sql = getSql();
+  if (!sql || !/^[a-f0-9]{32}$/.test(installationId)) return false;
+  await ensureSchema(sql);
+  await sql`INSERT INTO atlantic_energy_tariff_settings (installation_id, settings, updated_at)
+    VALUES (${installationId}, ${JSON.stringify(settings)}::jsonb, NOW())
+    ON CONFLICT (installation_id) DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()`;
+  return true;
 }
