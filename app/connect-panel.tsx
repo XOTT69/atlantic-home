@@ -15,9 +15,11 @@ type Device = {
 
 type AccessDiagnostics = {
   appPasswordConfigured: boolean;
+  rawCookieHeaderPresent: boolean;
   sessionCookiePresent: boolean;
   sessionReadable: boolean;
   appUnlocked: boolean;
+  requestHost: string | null;
 };
 
 export default function ConnectPanel() {
@@ -137,7 +139,7 @@ export default function ConnectPanel() {
         <label>Email Cozytouch<input type="email" name="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label>
         <label>Пароль Cozytouch<input type="password" name="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Пароль від Cozytouch"/></label>
         {error && <p className="form-error" role="alert">{error}</p>}
-        {accessDiagnostics && <p className="connect-description" role="status">Стан сесії: cookie {accessDiagnostics.sessionCookiePresent ? "надіслана" : "не надіслана"}; сесія {accessDiagnostics.sessionReadable ? "читається" : "не читається"}; доступ {accessDiagnostics.appUnlocked ? "розблокований" : "не розблокований"}; пароль застосунку {accessDiagnostics.appPasswordConfigured ? "налаштований" : "не налаштований"}.</p>}
+        {accessDiagnostics && <p className="connect-description" role="status">Стан сесії: заголовок cookie {accessDiagnostics.rawCookieHeaderPresent ? "містить Atlantic Home" : "без Atlantic Home"}; cookie {accessDiagnostics.sessionCookiePresent ? "розпізнана Next.js" : "не розпізнана Next.js"}; сесія {accessDiagnostics.sessionReadable ? "читається" : "не читається"}; доступ {accessDiagnostics.appUnlocked ? "розблокований" : "не розблокований"}; пароль застосунку {accessDiagnostics.appPasswordConfigured ? "налаштований" : "не налаштований"}. Host: {accessDiagnostics.requestHost ?? "невідомий"}.</p>}
         <button className="connect-submit" type="submit" disabled={busy}>{busy ? "Підключення…" : "Підключити акаунт"}</button>
       </form>
     </>}

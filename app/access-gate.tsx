@@ -5,9 +5,11 @@ import { LockKeyhole, ShieldCheck } from "lucide-react";
 
 type AccessDiagnostics = {
   appPasswordConfigured: boolean;
+  rawCookieHeaderPresent: boolean;
   sessionCookiePresent: boolean;
   sessionReadable: boolean;
   appUnlocked: boolean;
+  requestHost: string | null;
 };
 
 export default function AccessGate({configured=true,configurationError}:{configured?:boolean;configurationError?:string}) {
@@ -25,7 +27,7 @@ export default function AccessGate({configured=true,configurationError}:{configu
       const status=await statusResponse.json() as AccessDiagnostics;
       if(!statusResponse.ok || !status.sessionCookiePresent || !status.appUnlocked) {
         setAccessDiagnostics(status);
-        setError("Пароль прийнято, але браузер не передав сесію серверу. Відкрий атлантик-хоум безпосередньо в Safari або Chrome, не у вбудованому вікні, і спробуй ще раз.");
+        setError("Пароль прийнято, але запит перевірки сесії не отримав cookie Atlantic Home. Перевір діагностику нижче.");
         return;
       }
       window.location.reload();
@@ -38,7 +40,7 @@ export default function AccessGate({configured=true,configurationError}:{configu
     <p className="access-copy">{configurationError ? `Не вдалося підготувати захищений вхід: ${configurationError} Перевір Vercel → Project → Settings → Environment Variables і зроби Redeploy.` : configured ? "Ця панель керує домашнім опаленням. Введи пароль доступу до застосунку." : "Захист ще не налаштований. У Vercel → Project → Settings → Environment Variables додай ATLANTIC_APP_PASSWORD (від 4 символів) і SESSION_PASSWORD (від 32 символів), потім зроби Redeploy."}</p>
     {configured && <label className="access-label">Пароль<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} minLength={4} maxLength={128} required autoFocus/></label>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    {accessDiagnostics && <p className="connect-description" role="status">Стан сесії: cookie {accessDiagnostics.sessionCookiePresent ? "надіслана" : "не надіслана"}; сесія {accessDiagnostics.sessionReadable ? "читається" : "не читається"}; доступ {accessDiagnostics.appUnlocked ? "розблокований" : "не розблокований"}.</p>}
+    {accessDiagnostics && <p className="connect-description" role="status">Стан сесії: заголовок cookie {accessDiagnostics.rawCookieHeaderPresent ? "містить Atlantic Home" : "без Atlantic Home"}; cookie {accessDiagnostics.sessionCookiePresent ? "розпізнана Next.js" : "не розпізнана Next.js"}; сесія {accessDiagnostics.sessionReadable ? "читається" : "не читається"}; доступ {accessDiagnostics.appUnlocked ? "розблокований" : "не розблокований"}; пароль застосунку {accessDiagnostics.appPasswordConfigured ? "налаштований" : "не налаштований"}. Host: {accessDiagnostics.requestHost ?? "невідомий"}.</p>}
     {configurationError ? <button className="connect-submit" type="button" onClick={()=>window.location.reload()}>Перевірити знову</button> : <button className="connect-submit" disabled={busy || !configured}>{busy ? "Перевіряємо…" : "Увійти"}</button>}
     <div className="security-note"><ShieldCheck size={15}/> Захищена сесія · HttpOnly cookie</div>
   </form></main>;
