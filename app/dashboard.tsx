@@ -28,6 +28,8 @@ type EnergySnapshot = { at: number; wh: number };
 type EnergyEstimate = { kwh: number; caption: string };
 type EnergyHistorySample = { sampledAt: number; cumulativeEnergyWh: number };
 type ManagedDevice = { id: string; type: "atlantic-heater" | "mycond-roomer-12" | "custom"; name: string; room: string };
+type MycondFunction = { code: string; type?: string; values?: string; name?: string; desc?: string };
+type MycondSnapshot = { configured: boolean; online: boolean | null; deviceName: string | null; statuses: { code: string; value: unknown }[]; functions: MycondFunction[]; error?: string };
 const WEEKLY_PROGRAMS = [
   ["Понеділок", "MondayTimeProgram"], ["Вівторок", "TuesdayTimeProgram"],
   ["Середа", "WednesdayTimeProgram"], ["Четвер", "ThursdayTimeProgram"],
@@ -124,6 +126,10 @@ export default function HomePage() {
   const [deviceConfigReady, setDeviceConfigReady] = useState(false);
   const [deviceConfigSync, setDeviceConfigSync] = useState<"idle" | "ready" | "error">("idle");
   const [deviceSaveError, setDeviceSaveError] = useState(false);
+  const [mycondSnapshot, setMycondSnapshot] = useState<MycondSnapshot | null>(null);
+  const [mycondLoading, setMycondLoading] = useState(false);
+  const [mycondBusyCode, setMycondBusyCode] = useState<string | null>(null);
+  const [mycondError, setMycondError] = useState("");
   const [energyDate, setEnergyDate] = useState<string | null>(null);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
   const [energyDiagnostics, setEnergyDiagnostics] = useState<EnergyDiagnostics | null>(null);
@@ -143,6 +149,25 @@ export default function HomePage() {
   const [connectionRecovered, setConnectionRecovered] = useState(false);
   const gatewayWasOffline = useRef(false);
   const pendingControl = useRef<{action:string;value:unknown;until:number}|null>(null);
+  const hasMycondDevice = managedDevices.some(device => device.type === "mycond-roomer-12");
+  useEffect(() => {
+    if (tab !== "devices" || !hasMycondDevice) return;
+    let active = true;
+    const refresh = async () => {
+      setMycondLoading(true);
+      try {
+        const response = await fetch("/api/mycond/status", { cache: "no-store", credentials: "same-origin" });
+        const data = await response.json() as MycondSnapshot;
+        if (!response.ok) throw new Error(data.error || "MYCOND_TUYA_API_UNAVAILABLE");
+        if (active) { setMycondSnapshot(data); setMycondError(data.error ?? ""); }
+      } catch (error) {
+        if (active) setMycondError(error instanceof Error ? error.message : "MYCOND_TUYA_API_UNAVAILABLE");
+      } finally { if (active) setMycondLoading(false); }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [tab, hasMycondDevice]);
   useEffect(() => {
     let saved: unknown = null;
     try { saved = JSON.parse(window.localStorage.getItem(ENERGY_TARIFF_KEY) ?? "null"); } catch { saved = null; }
@@ -465,6 +490,42 @@ export default function HomePage() {
     }]);
   }
 
+  async function sendMycondControl(code: string, value: unknown) {
+    setMycondBusyCode(code);
+    setMycondError("");
+    try {
+      const response = await fetch("/api/mycond/control", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, value })
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || "MYCOND_COMMAND_FAILED");
+      await new Promise(resolve => window.setTimeout(resolve, 1200));
+      const status = await fetch("/api/mycond/status", { cache: "no-store", credentials: "same-origin" });
+      const snapshot = await status.json() as MycondSnapshot;
+      if (!status.ok) throw new Error(snapshot.error || "MYCOND_TUYA_API_UNAVAILABLE");
+      setMycondSnapshot(snapshot);
+    } catch (error) { setMycondError(error instanceof Error ? error.message : "MYCOND_COMMAND_FAILED"); }
+    finally { setMycondBusyCode(null); }
+  }
+
+  function mycondValueOptions(fn: MycondFunction) {
+    try {
+      const value: unknown = JSON.parse(fn.values ?? "{}");
+      return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    } catch { return {}; }
+  }
+
+  function mycondLabel(code: string) {
+    const names: Record<string, string> = {
+      switch: "Живлення", switch_1: "Живлення", mode: "Режим", humidity_set: "Цільова вологість",
+      fan_speed: "Швидкість вентилятора", countdown_set: "Таймер", humidity_indoor: "Вологість у кімнаті",
+      temp_indoor: "Температура в кімнаті", water_full: "Резервуар для води", fault: "Помилка"
+    };
+    return names[code] ?? code.replaceAll("_", " ");
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -602,7 +663,28 @@ export default function HomePage() {
             <label className="tariff-input-label">Назва<input value={device.name} maxLength={64} onChange={event=>updateManagedDevice(device.id,{name:event.target.value})}/></label>
             <label className="tariff-input-label">Кімната<input value={device.room} maxLength={50} placeholder="Наприклад, спальня" onChange={event=>updateManagedDevice(device.id,{room:event.target.value})}/></label>
             {device.type === "atlantic-heater" && <button className="wide-outline" onClick={()=>setTab("home")}>Відкрити керування Atlantic <ArrowUpRight size={16}/></button>}
-            {device.type === "mycond-roomer-12" && <div className="device-integration-note"><strong>Картка пристрою готова · прямих даних поки немає</strong><span>MYCOND підтверджує для Roomer Smart 12 керування живленням, цільовою вологістю 20–80%, режимом, швидкістю вентилятора й таймером у своєму застосунку. Публічного API MYCOND для підключення цього пристрою до Atlantic Home не опубліковано. Тут можна редагувати назву й кімнату; покази та команди з’являться, коли буде підтримуваний інтерфейс інтеграції.</span><a href="https://mycond.eu/residential-air-dehumidifiers-roomer-smart-12" target="_blank" rel="noreferrer">Характеристики та функції від MYCOND</a></div>}
+            {device.type === "mycond-roomer-12" && <div className="device-integration-note">
+              <strong>{mycondLoading ? "З’єднуємося з Tuya Cloud…" : mycondSnapshot?.configured ? `MYCOND Cloud · ${mycondSnapshot.online === true ? "онлайн" : mycondSnapshot.online === false ? "офлайн" : "стан пристрою невідомий"}` : "Керування через офіційний Tuya Cloud API"}</strong>
+              {!mycondSnapshot?.configured && !mycondError && <span>Для запуску прив’яжи застосунок MYCOND як OEM App до Tuya Cloud-проєкту, додай серверні ключі в Vercel і вкажи ID пристрою. Atlantic Home запитуватиме фактичні стани й доступні команди з API самого пристрою.</span>}
+              {mycondError && <span>Не вдалося отримати стан: {mycondError}. Перевір прив’язку MYCOND app, регіон Tuya Cloud, права API та ID пристрою у Vercel.</span>}
+              {mycondSnapshot?.configured && <>
+                {mycondSnapshot.deviceName && <span>Пристрій у хмарі: {mycondSnapshot.deviceName}</span>}
+                <div className="mycond-readings">{mycondSnapshot.statuses.map(item=><div key={item.code}><span>{mycondLabel(item.code)}</span><strong>{String(item.value)}</strong></div>)}</div>
+                <div className="mycond-controls">{mycondSnapshot.functions.map(fn=>{
+                  const value = mycondValueOptions(fn);
+                  const current = mycondSnapshot.statuses.find(item=>item.code===fn.code)?.value;
+                  const type = (fn.type ?? "").toLowerCase();
+                  const busy = mycondBusyCode === fn.code;
+                  if (type === "boolean") return <button className="mycond-control-button" key={fn.code} disabled={!!mycondBusyCode} onClick={()=>sendMycondControl(fn.code, current !== true)}>{mycondLabel(fn.code)}: {current === true ? "Увімкнено" : "Вимкнено"}{busy ? " · надсилаємо…" : ""}</button>;
+                  if (type === "enum" && Array.isArray(value.range)) return <label className="mycond-control-field" key={fn.code}>{mycondLabel(fn.code)}<select value={typeof current === "string" ? current : ""} disabled={!!mycondBusyCode} onChange={event=>sendMycondControl(fn.code,event.target.value)}><option value="" disabled>Обрати…</option>{value.range.map(option=><option key={String(option)} value={String(option)}>{String(option)}</option>)}</select></label>;
+                  if ((type === "integer" || type === "number") && Number.isFinite(Number(value.min)) && Number.isFinite(Number(value.max))) return <label className="mycond-control-field" key={fn.code}>{mycondLabel(fn.code)} · {current === undefined ? "—" : String(current)}<input type="range" min={Number(value.min)} max={Number(value.max)} step={Number(value.step ?? 1)} value={Number(current ?? value.min)} disabled={!!mycondBusyCode} onPointerUp={event=>sendMycondControl(fn.code,Number((event.target as HTMLInputElement).value))} onKeyUp={event=>{if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End"].includes(event.key))void sendMycondControl(fn.code,Number((event.target as HTMLInputElement).value));}}/></label>;
+                  return null;
+                })}</div>
+                {mycondSnapshot.functions.length === 0 && <span>API не повернув перелік підтримуваних команд для цього пристрою.</span>}
+              </>}
+              <a href="https://developer.tuya.com/en/docs/iot/link-devices?id=Ka471nu1sfmkl" target="_blank" rel="noreferrer">Інструкція Tuya: прив’язати OEM app до Cloud-проєкту</a>
+              <a href="https://mycond.eu/residential-air-dehumidifiers-roomer-smart-12" target="_blank" rel="noreferrer">Характеристики Roomer Smart 12 від MYCOND</a>
+            </div>}
           </article>)}</div>
           <div className="device-add-actions"><button disabled={managedDevices.some(device=>device.type==="atlantic-heater")} onClick={()=>addManagedDevice("atlantic-heater")}><Plus size={16}/> Додати Atlantic</button><button onClick={()=>addManagedDevice("mycond-roomer-12")}><Plus size={16}/> Додати Mycond</button><button onClick={()=>addManagedDevice("custom")}><Plus size={16}/> Інший пристрій</button></div>
           <p className="hourly-note">{deviceConfigSync === "ready" && !deviceSaveError ? "Зміни синхронізуються через Neon." : deviceConfigSync === "error" || deviceSaveError ? "Не вдалося синхронізувати список; копія лишається в цьому браузері." : "Збереження в хмару активується після підключення Cozytouch і Neon."}</p>
