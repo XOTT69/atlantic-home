@@ -23,7 +23,7 @@ export default function ConnectPanel() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    fetch("/api/cozytouch/state", { cache: "no-store" })
+    fetch("/api/cozytouch/state", { cache: "no-store", credentials: "same-origin" })
       .then(async r => r.ok ? r.json() : null)
       .then(data => {
         const d = data?.heater ?? data?.devices?.find((item: { modelId?: string }) => String(item.modelId ?? "").includes("AtlanticElectricalHeater"));
@@ -44,12 +44,18 @@ export default function ConnectPanel() {
     try {
       const response = await fetch("/api/cozytouch/connect", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });
       const data = await response.json();
+      if (response.status === 401 && data.error === "Потрібен пароль доступу до Atlantic Home.") {
+        await fetch("/api/access/lock", { method: "POST", credentials: "same-origin" });
+        window.location.reload();
+        return;
+      }
       if (!response.ok) throw new Error(data.error || "Не вдалося підключитися.");
-      const stateResponse = await fetch("/api/cozytouch/state", { cache: "no-store" });
+      const stateResponse = await fetch("/api/cozytouch/state", { cache: "no-store", credentials: "same-origin" });
       const live = stateResponse.ok ? await stateResponse.json() : null;
       const d = live?.heater;
       if (!d) {
@@ -87,7 +93,7 @@ export default function ConnectPanel() {
   }
 
   async function disconnect() {
-    await fetch("/api/cozytouch/disconnect", { method: "POST" });
+    await fetch("/api/cozytouch/disconnect", { method: "POST", credentials: "same-origin" });
     setDevice(null);
     setError("");
   }

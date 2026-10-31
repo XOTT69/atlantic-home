@@ -10,7 +10,7 @@ export default function AccessGate({configured=true,configurationError}:{configu
   async function unlock(event:FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response=await fetch("/api/access/unlock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});
+      const response=await fetch("/api/access/unlock",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});
       const data=await response.json();
       if(!response.ok) throw new Error(data.error || "Не вдалося увійти.");
       window.location.reload();

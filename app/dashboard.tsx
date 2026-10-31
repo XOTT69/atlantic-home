@@ -72,7 +72,7 @@ export default function HomePage() {
     };
     const refresh = async () => {
       try {
-        const response = await fetch("/api/cozytouch/state", { cache: "no-store" });
+        const response = await fetch("/api/cozytouch/state", { cache: "no-store", credentials: "same-origin" });
         if (!response.ok) throw new Error("state_unavailable");
         const data = await response.json();
         if (!active) return;
@@ -152,6 +152,7 @@ export default function HomePage() {
     try {
       const response = await fetch("/api/cozytouch/control", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, value })
       });
@@ -297,7 +298,7 @@ export default function HomePage() {
         {tab === "settings" && <div className="subpage">
           <p className="eyebrow">КОНФІГУРАЦІЯ</p><h1>Налаштування<span>.</span></h1>
           <div className="settings-card"><div className="settings-row"><div className="settings-symbol"><Wifi size={19}/></div><div><strong>Обліковий запис Cozytouch</strong><small>{liveDevice ? "Підключено до Atlantic Home" : "Перевірка підключення"}</small></div><span className="settings-state">{liveDevice ? "Підключено" : "Очікує"}</span></div><div className="settings-row"><div className="settings-symbol"><Flame size={19}/></div><div><strong>Мій конвектор</strong><small>{liveDevice?.name ?? "Altis Eco Boost 3 Wi-Fi · 1000 Вт"}</small></div><span className="settings-state">{liveDevice ? "Знайдено" : "Не перевірено"}</span></div><div className="settings-row"><div className="settings-symbol"><ShieldCheck size={19}/></div><div><strong>Безпека</strong><small>Облікові дані зберігатимуться лише на сервері</small></div><Check size={17} className="check-icon"/></div></div>
-          <button className="disconnect-button" onClick={async()=>{await fetch("/api/access/lock",{method:"POST"});window.location.reload();}}>Заблокувати Atlantic Home</button>
+          <button className="disconnect-button" onClick={async()=>{await fetch("/api/access/lock",{method:"POST",credentials:"same-origin"});window.location.reload();}}>Заблокувати Atlantic Home</button>
         </div>}
       </section>
 
