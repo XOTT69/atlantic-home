@@ -8,11 +8,17 @@ export interface CozytouchSession {
   appUnlocked?: boolean;
 }
 
+export function getSessionConfigurationError() {
+  const password = process.env.SESSION_PASSWORD;
+  if (!password) return "На сервері не задано SESSION_PASSWORD.";
+  if (password.length < 32) return "SESSION_PASSWORD має містити щонайменше 32 символи.";
+  return null;
+}
+
 export async function getCozytouchSession() {
   const password = process.env.SESSION_PASSWORD;
-  if (!password || password.length < 32) {
-    throw new Error("SESSION_PASSWORD must contain at least 32 characters");
-  }
+  const configurationError = getSessionConfigurationError();
+  if (configurationError || !password) throw new Error(configurationError ?? "SESSION_PASSWORD is missing");
 
   const options: SessionOptions = {
     cookieName: "atlantic_home_session",

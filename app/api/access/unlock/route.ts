@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { getCozytouchSession } from "@/lib/session";
+import { getCozytouchSession, getSessionConfigurationError } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,10 @@ export async function POST(request: Request) {
   const configured = process.env.ATLANTIC_APP_PASSWORD;
   if (!configured || configured.length < 4) {
     return NextResponse.json({ error: "Власник застосунку ще не налаштував ATLANTIC_APP_PASSWORD у Vercel." }, { status: 503 });
+  }
+  const sessionConfigurationError = getSessionConfigurationError();
+  if (sessionConfigurationError) {
+    return NextResponse.json({ error: `Захищений вхід не налаштований: ${sessionConfigurationError} Перевір змінні середовища у Vercel і зроби Redeploy.` }, { status: 503 });
   }
   try {
     const body = await request.json() as { password?: unknown };

@@ -4,11 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import ConnectPanel from "./connect-panel";
 import {
   Activity, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleHelp,
-  Clock3, Flame, Gauge, House, Leaf, MoreHorizontal, Power, Settings2,
-  ShieldCheck, Snowflake, Thermometer, Wifi, Zap, RefreshCw
+  Flame, Gauge, House, Power, Settings2, ShieldCheck, Thermometer, Wifi,
+  Zap, RefreshCw
 } from "lucide-react";
 
 type Tab = "home" | "schedule" | "energy" | "settings";
+type EnergyDiagnostics = {
+  dailyErrorCode?: string | null;
+  hourlyErrorCode?: string | null;
+  hourlyErrorDetails?: string | null;
+  daily?: { seriesCount?: number; parsedPeriods?: number } | null;
+  hourly?: { seriesCount?: number; parsedPeriods?: number } | null;
+  devices?: {
+    name: string;
+    model: string | null;
+    states: string[];
+    readings: { name: unknown; value: unknown }[];
+  }[];
+};
 
 
 export default function HomePage() {
@@ -24,7 +37,7 @@ export default function HomePage() {
   const [winterTierReady, setWinterTierReady] = useState(false);
   const [hourlyEnergy, setHourlyEnergy] = useState<{timestamp:number;quantityKwh:number;mode:number}[]>([]);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
-  const [energyDiagnostics, setEnergyDiagnostics] = useState<any>(null);
+  const [energyDiagnostics, setEnergyDiagnostics] = useState<EnergyDiagnostics | null>(null);
   const [roomTemperatureStatus, setRoomTemperatureStatus] = useState<"online" | "unknown">("unknown");
   const [deviceLastSuccessAt, setDeviceLastSuccessAt] = useState<string | null>(null);
   const [roomTemperatureLastSuccessAt, setRoomTemperatureLastSuccessAt] = useState<string | null>(null);
@@ -43,6 +56,8 @@ export default function HomePage() {
   const pendingControl = useRef<{action:string;value:unknown;until:number}|null>(null);
   useEffect(() => {
     const saved = window.localStorage.getItem("atlantic-home-winter-tier");
+    // Read persisted preference after hydration so server and client first renders match.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved === "discount" || saved === "standard") setWinterTier(saved);
     setWinterTierReady(true);
   }, []);
@@ -225,11 +240,11 @@ export default function HomePage() {
             <div className="demo-note"><CircleHelp size={14}/> {controlError || (deviceStatus === "online" ? "Конвектор онлайн. Стан оновлюється кожні 30 секунд." : deviceStatus === "offline" ? "Конвектор офлайн. Керування заблоковано до відновлення зв’язку." : "Очікуємо підтвердження стану конвектора через Cozytouch.")}</div>
           </div>
 
-          <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">{liveDevice ? "Дані Cozytouch" : "Немає з'єднання"}</span></div>
+          <div className="section-heading"><div><p className="eyebrow">СТАН ПРИСТРОЮ</p><h2>Зараз у кімнаті</h2></div><span className="muted-tag">{liveDevice ? "Дані Cozytouch" : "Немає зв’язку"}</span></div>
           <div className="metrics-grid">
             <div className="metric-card"><div className="metric-icon mint"><Thermometer size={17}/></div><span>Температура</span><strong>{roomTemperature === null ? "—" : roomTemperature.toLocaleString("uk-UA")} °C</strong><small>{roomTemperatureStatus === "online" ? (roomTemperatureLastSuccessAt ? "Оновлено " + new Date(roomTemperatureLastSuccessAt).toLocaleTimeString("uk-UA", {hour:"2-digit",minute:"2-digit"}) : "Датчик відповів") : "Немає свіжого підтвердження"}</small></div>
             <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Споживання сьогодні</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} {energyConsumption === null ? "" : "кВт·год"}</strong><small>Добовий лічильник Atlantic</small></div>
-            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З'єднання</span><strong>{deviceStatus === "online" ? "Онлайн" : deviceStatus === "offline" ? "Офлайн" : "Невідомо"}</strong><small>{gatewayOnline ? "Шлюз доступний" : "Шлюз не підтвердив зв’язок"}{deviceLastSuccessAt ? " · відповідь " + new Date(deviceLastSuccessAt).toLocaleTimeString("uk-UA", {hour:"2-digit",minute:"2-digit"}) : ""}</small></div>
+            <div className="metric-card"><div className="metric-icon blue"><Wifi size={17}/></div><span>З’єднання</span><strong>{deviceStatus === "online" ? "Онлайн" : deviceStatus === "offline" ? "Офлайн" : "Невідомо"}</strong><small>{gatewayOnline ? "Шлюз доступний" : "Шлюз не підтвердив зв’язок"}{deviceLastSuccessAt ? " · відповідь " + new Date(deviceLastSuccessAt).toLocaleTimeString("uk-UA", {hour:"2-digit",minute:"2-digit"}) : ""}</small></div>
             <div className="metric-card"><div className="metric-icon violet"><Activity size={17}/></div><span>Нагрівання</span><strong>{String(heaterStates.TargetHeatingLevel ?? "—")}</strong><small>Рівень нагрівання</small></div>
             <div className="metric-card"><div className="metric-icon amber"><Zap size={17}/></div><span>Потужність зараз</span><strong>{instantaneousPowerW === null ? "—" : instantaneousPowerW.toLocaleString("uk-UA") + " Вт"}</strong><small>{instantaneousPowerW === null ? "Датчик потужності не передає значення" : "Останнє вимірювання Cozytouch"}</small></div>
           </div>
@@ -275,7 +290,7 @@ export default function HomePage() {
             <div className="empty-caption">Добові дані: {energyDiagnostics.dailyErrorCode || (energyDiagnostics.daily ? "серій: "+energyDiagnostics.daily.seriesCount+" · періодів: "+energyDiagnostics.daily.parsedPeriods : "без помилки")}</div>
             <div className="empty-caption">Погодинні дані: {energyDiagnostics.hourlyErrorCode || (energyDiagnostics.hourly ? "серій: "+energyDiagnostics.hourly.seriesCount+" · періодів: "+energyDiagnostics.hourly.parsedPeriods : "без помилки")}</div>
             {energyDiagnostics.hourlyErrorDetails ? <div className="empty-caption" style={{overflowWrap:"anywhere",whiteSpace:"normal"}}>Відповідь Atlantic: {energyDiagnostics.hourlyErrorDetails}</div> : null}
-            {energyDiagnostics.devices?.map((device:any,index:number)=><div className="diagnostic-row" key={index}><strong>{device.name}</strong><small>{device.model}</small><small>Поля: {(device.states ?? []).join(", ") || "не описані"}</small><small>Значення: {(device.readings ?? []).map((x:any)=>x.name+"="+String(x.value)).join(" · ") || "поки немає"}</small></div>)}
+            {energyDiagnostics.devices?.map((device,index)=><div className="diagnostic-row" key={index}><strong>{device.name}</strong><small>{device.model}</small><small>Поля: {device.states.join(", ") || "не описані"}</small><small>Значення: {device.readings.map(reading=>String(reading.name)+"="+String(reading.value)).join(" · ") || "поки немає"}</small></div>)}
           </div>}
         </div>}
 

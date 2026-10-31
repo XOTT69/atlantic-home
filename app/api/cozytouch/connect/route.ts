@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     // installation through the JWT exchange + enduserAPI/setup flow.
     // This is read-only; never return or log the JWT, cookies, or raw setup data.
     let legacySetup: Record<string, unknown> | null = null;
-    let legacyProbe: Record<string, unknown> = { jwtStatus: 0, loginStatus: 0, setupStatus: 0 };
+    const legacyProbe: Record<string, unknown> = { jwtStatus: 0, loginStatus: 0, setupStatus: 0 };
     try {
       const jwtResponse = await fetch(API + "/magellan/accounts/jwt", {
         headers: { Authorization: "Bearer " + token.access_token },
