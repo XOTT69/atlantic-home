@@ -13,6 +13,13 @@ type Device = {
   diagnostics?: Record<string, unknown>;
 };
 
+type AccessDiagnostics = {
+  appPasswordConfigured: boolean;
+  sessionCookiePresent: boolean;
+  sessionReadable: boolean;
+  appUnlocked: boolean;
+};
+
 export default function ConnectPanel() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,6 +28,7 @@ export default function ConnectPanel() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [accessDiagnostics, setAccessDiagnostics] = useState<AccessDiagnostics | null>(null);
 
   useEffect(() => {
     fetch("/api/cozytouch/state", { cache: "no-store", credentials: "same-origin" })
@@ -50,8 +58,9 @@ export default function ConnectPanel() {
       });
       const data = await response.json();
       if (response.status === 401 && data.error === "Потрібен пароль доступу до Atlantic Home.") {
-        await fetch("/api/access/lock", { method: "POST", credentials: "same-origin" });
-        window.location.reload();
+        const diagnosticsResponse = await fetch("/api/access/status", { cache: "no-store", credentials: "same-origin" });
+        if (diagnosticsResponse.ok) setAccessDiagnostics(await diagnosticsResponse.json());
+        setError("Сервер не підтвердив сесію Atlantic Home. Застосунок не заблоковано; діагностика нижче покаже, що саме не дійшло до API.");
         return;
       }
       if (!response.ok) throw new Error(data.error || "Не вдалося підключитися.");
@@ -128,6 +137,7 @@ export default function ConnectPanel() {
         <label>Email Cozytouch<input type="email" name="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label>
         <label>Пароль Cozytouch<input type="password" name="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Пароль від Cozytouch"/></label>
         {error && <p className="form-error" role="alert">{error}</p>}
+        {accessDiagnostics && <p className="connect-description" role="status">Стан сесії: cookie {accessDiagnostics.sessionCookiePresent ? "надіслана" : "не надіслана"}; сесія {accessDiagnostics.sessionReadable ? "читається" : "не читається"}; доступ {accessDiagnostics.appUnlocked ? "розблокований" : "не розблокований"}; пароль застосунку {accessDiagnostics.appPasswordConfigured ? "налаштований" : "не налаштований"}.</p>}
         <button className="connect-submit" type="submit" disabled={busy}>{busy ? "Підключення…" : "Підключити акаунт"}</button>
       </form>
     </>}
