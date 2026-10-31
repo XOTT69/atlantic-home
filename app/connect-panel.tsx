@@ -122,6 +122,7 @@ export default function ConnectPanel() {
         <span className={device.isAvailable === false ? "device-offline" : "device-online"}>{device.isAvailable === false ? "Офлайн" : "Знайдено"}</span>
       </div>
       <p className="connect-description">Контролер Atlantic визначено. Стан конвектора та датчики читаються через Cozytouch; команди керування доступні на головному екрані.</p>
+      <p className="connect-description">Якщо фоновий збір показує, що токен не збережений, перепідключи Cozytouch після налаштування Neon. Це збереже новий токен для планового збору.</p>
       <details className="capability-details">
         <summary>Технічні дані пристрою та шлюзу</summary>
         <div className="capability-list">
@@ -130,7 +131,7 @@ export default function ConnectPanel() {
         </div>
       </details>
       <button className="copy-diagnostics" onClick={copyDiagnostics}>{copied ? "Дані скопійовано" : "Скопіювати технічні дані"}</button>
-      <button className="disconnect-button" onClick={disconnect}>Від’єднати Cozytouch</button>
+      <button className="disconnect-button" onClick={disconnect}>Перепідключити Cozytouch</button>
     </> : checkingSession ? <>
       <p className="connect-description">Перевіряємо збережене підключення Cozytouch…</p>
     </> : <>

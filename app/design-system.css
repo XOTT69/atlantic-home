@@ -349,6 +349,28 @@ summary:focus-visible {
 .access-card h1 { color: var(--ink); font-size: clamp(28px, 8vw, 34px); }
 .access-copy { color: var(--muted); line-height: 1.6; }
 
+.background-setup-button,
+.background-refresh-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  margin: 5px 7px 0 0;
+  padding: 9px 12px;
+  border: 1px solid #c9deef;
+  border-radius: 11px;
+  background: #f3f9fe;
+  color: #176fae;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+.background-setup-button { border-color: #1688e8; background: #1688e8; color: #fff; }
+.background-setup-button:hover { background: #0871ca; }
+.background-refresh-button:disabled { opacity: .55; cursor: wait; }
+.background-actions-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: var(--accent-dark); font-size: 11px; font-weight: 700; line-height: 1.4; text-decoration: none; }
+
 @media (max-width: 380px) {
   .topbar { height: 60px; padding-inline: 14px; }
   .brand { gap: 8px; font-size: 15px; }

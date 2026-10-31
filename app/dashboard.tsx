@@ -113,7 +113,9 @@ export default function HomePage() {
   const [observedTodayEnergy, setObservedTodayEnergy] = useState<EnergyEstimate | null>(null);
   const [energyHistoryId, setEnergyHistoryId] = useState<string | null>(null);
   const [energyStorage, setEnergyStorage] = useState<"ready" | "not_configured" | "error">("not_configured");
-  const [backgroundCollection, setBackgroundCollection] = useState<"checking" | "ready" | "reconnect" | "unavailable" | "error">("checking");
+  const [backgroundCollection, setBackgroundCollection] = useState<"checking" | "ready" | "reconnect" | "unavailable" | "cron_missing" | "error">("checking");
+  const [backgroundReason, setBackgroundReason] = useState("");
+  const [backgroundStatusRefresh, setBackgroundStatusRefresh] = useState(0);
   const [energyHistory, setEnergyHistory] = useState<EnergyHistorySample[]>([]);
   const [energyChartDays, setEnergyChartDays] = useState<7 | 30>(7);
   const [energyRates, setEnergyRates] = useState<EnergyRates>(DEFAULT_ENERGY_RATES);
@@ -237,11 +239,17 @@ export default function HomePage() {
         return response.json();
       })
       .then(data => {
-        if (active) setBackgroundCollection(data?.refreshAvailable ? "ready" : data?.configured ? "reconnect" : "unavailable");
+        if (!active) return;
+        const reason = typeof data?.reason === "string" ? data.reason : "unknown";
+        setBackgroundReason(reason);
+        setBackgroundCollection(reason === "ready" ? "ready"
+          : reason === "cron_secret_missing" ? "cron_missing"
+          : reason === "credentials_missing" || reason === "refresh_token_missing" ? "reconnect"
+          : "unavailable");
       })
       .catch(() => { if (active) setBackgroundCollection("error"); });
     return () => { active = false; };
-  }, [energyHistoryId, energyStorage]);
+  }, [energyHistoryId, energyStorage, backgroundStatusRefresh, tab]);
   useEffect(() => {
     if (tariffSync !== "ready" || !energyHistoryId) return;
     const timer = window.setTimeout(() => {
@@ -627,7 +635,13 @@ export default function HomePage() {
           <p className="subcopy">Лічильник конвектора показує накопичені Вт·год. Історія й оцінка вартості оновлюються, коли застосунок зчитує Cozytouch.</p>
           <div className="energy-card"><div className="energy-top"><div><span>НАКОПИЧЕНО ЛІЧИЛЬНИКОМ КОНВЕКТОРА</span><strong>{cumulativeEnergyKwh === null ? "—" : cumulativeEnergyKwh.toLocaleString("uk-UA",{minimumFractionDigits:1,maximumFractionDigits:1})} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{cumulativeEnergyKwh === null ? "Лічильник поки не передав значення." : "Загальний показник датчика Atlantic · " + Math.round(cumulativeEnergyKwh * 1000).toLocaleString("uk-UA") + " Вт·год"}</div></div>
           <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>{todayEnergyEstimate ? todayEnergyEstimate.kwh.toLocaleString("uk-UA",{minimumFractionDigits:3,maximumFractionDigits:3}) : "—"} <small>кВт·год</small></strong></div><span className="muted-tag">Оцінка лічильника</span></div><div className="empty-caption">{todayEnergyEstimate?.caption ?? "Потрібно щонайменше два збережені покази лічильника."}</div>{energyConsumption !== null && <p className="hourly-note">Звіт Atlantic за добу: {energyConsumption.toLocaleString("uk-UA")} кВт·год{energyDate ? " · " + new Date(energyDate).toLocaleDateString("uk-UA") : ""}.</p>}</div>
-          <div className="energy-card background-collection-card"><div className="energy-top"><div><span>ФОНОВИЙ ЗБІР ПОКАЗІВ</span><strong style={{fontSize:18}}>{backgroundCollection === "ready" ? "Токен готовий" : backgroundCollection === "reconnect" ? "Потрібне перепідключення" : backgroundCollection === "unavailable" ? "Не налаштовано" : backgroundCollection === "error" ? "Помилка перевірки" : "Перевіряємо…"}</strong></div><span className="muted-tag">GitHub Actions</span></div><p className="hourly-note">{backgroundCollection === "ready" ? "Refresh token збережений зашифровано в Neon. Для запуску кожні 15 хвилин додай однаковий CRON_SECRET у GitHub Actions і Vercel." : backgroundCollection === "reconnect" ? "У Cozytouch немає refresh token. Перепідключи акаунт після оновлення, щоб дозволити фонове оновлення сесії." : backgroundCollection === "unavailable" ? "Спочатку потрібні Neon, підключений Cozytouch і секрет CRON_SECRET у Vercel та GitHub." : backgroundCollection === "error" ? "Не вдалося прочитати стан фонового доступу." : "Статус з’явиться після зчитування Cozytouch."}</p><a className="background-actions-link" href="https://github.com/XOTT69/atlantic-home/actions" target="_blank" rel="noreferrer">Перевірити запуск збору в GitHub Actions <ArrowUpRight size={14}/></a></div>
+          <div className="energy-card background-collection-card">
+            <div className="energy-top"><div><span>ФОНОВИЙ ЗБІР ПОКАЗІВ</span><strong style={{fontSize:18}}>{backgroundCollection === "ready" ? "Налаштовано" : backgroundCollection === "reconnect" ? "Потрібне перепідключення" : backgroundCollection === "cron_missing" ? "Не вистачає CRON_SECRET" : backgroundCollection === "unavailable" ? "Потрібне налаштування" : backgroundCollection === "error" ? "Помилка перевірки" : "Перевіряємо…"}</strong></div><span className="muted-tag">GitHub Actions</span></div>
+            <p className="hourly-note">{backgroundCollection === "ready" ? "Neon, токен Cozytouch для фонового доступу й CRON_SECRET налаштовані. Колектор запускається кожні 15 хвилин." : backgroundCollection === "reconnect" ? backgroundReason === "credentials_missing" ? "Neon доступний, але токен Cozytouch ще не збережений у базі. Перепідключи Cozytouch у профілі, щоб записати його." : "Atlantic не видав refresh token для фонової сесії. Перепідключи Cozytouch у профілі після налаштування Neon." : backgroundCollection === "cron_missing" ? "Додай CRON_SECRET довжиною від 32 символів і з однаковим значенням у Vercel Production та GitHub → Settings → Secrets and variables → Actions. Після зміни Vercel-змінної зроби redeploy." : backgroundCollection === "unavailable" ? backgroundReason === "neon_missing" ? "Vercel Production не бачить DATABASE_URL або POSTGRES_URL. Перевір, що Neon підключений саме до цього проєкту й Production, потім зроби redeploy." : backgroundReason === "session_password_missing" ? "У Vercel Production немає SESSION_PASSWORD довжиною щонайменше 32 символи. Додай її та зроби redeploy." : "Потрібне підключення Neon і SESSION_PASSWORD у Vercel Production." : backgroundCollection === "error" ? "Не вдалося прочитати стан. Перевір Neon і SESSION_PASSWORD; якщо SESSION_PASSWORD змінювався, перепідключи Cozytouch, щоб зашифрувати токен заново." : "Статус з’явиться після перевірки Cozytouch."}</p>
+            {(backgroundCollection === "reconnect" || backgroundReason === "credentials_missing" || backgroundReason === "refresh_token_missing") && <button className="background-setup-button" onClick={()=>setTab("settings")}>Відкрити профіль для перепідключення</button>}
+            <button className="background-refresh-button" disabled={backgroundCollection === "checking"} onClick={()=>{setBackgroundCollection("checking");setBackgroundStatusRefresh(value=>value+1);}}>Оновити перевірку</button>
+            <a className="background-actions-link" href="https://github.com/XOTT69/atlantic-home/actions" target="_blank" rel="noreferrer">Відкрити GitHub Actions <ArrowUpRight size={14}/></a>
+          </div>
           <div className="energy-card" style={{marginTop:12}}>
             <div className="energy-top"><div><span>ІСТОРІЯ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>За {energyChartDays} днів</strong></div><span className="muted-tag">{energyHistory.length} показів</span></div>
             <div className="energy-period-choice"><button className={energyChartDays === 7 ? "selected" : ""} onClick={()=>setEnergyChartDays(7)}>7 днів</button><button className={energyChartDays === 30 ? "selected" : ""} onClick={()=>setEnergyChartDays(30)}>30 днів</button><button className="energy-export" onClick={exportEnergyCsv} disabled={energyHistory.length < 2}><Download size={14}/> CSV</button></div>
