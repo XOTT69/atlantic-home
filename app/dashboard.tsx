@@ -23,6 +23,39 @@ type EnergyDiagnostics = {
   }[];
 };
 
+type EnergySnapshot = { at: number; wh: number };
+type EnergyEstimate = { kwh: number; caption: string };
+const ENERGY_SNAPSHOT_KEY = "atlantic-home-energy-snapshots-v1";
+
+function rememberEnergyReading(wh: number, now = Date.now()): EnergyEstimate | null {
+  if (!Number.isFinite(wh) || wh < 0) return null;
+  let history: EnergySnapshot[] = [];
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(ENERGY_SNAPSHOT_KEY) ?? "[]");
+    if (Array.isArray(stored)) history = stored.filter((item): item is EnergySnapshot =>
+      !!item && typeof item === "object" && Number.isFinite(item.at) && Number.isFinite(item.wh) && item.wh >= 0
+    );
+  } catch { /* Start a fresh local history if storage is unavailable or malformed. */ }
+
+  const latest = history[history.length - 1];
+  if (!latest || now - latest.at >= 60_000) history.push({ at: now, wh });
+  else history[history.length - 1] = { at: now, wh };
+  history = history.filter(item => item.at >= now - 32 * 24 * 60 * 60 * 1000).slice(-5000);
+  try { window.localStorage.setItem(ENERGY_SNAPSHOT_KEY, JSON.stringify(history)); } catch { /* The live reading still works without saved history. */ }
+
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const beforeToday = [...history].reverse().find(item => item.at < dayStart.getTime());
+  const today = history.filter(item => item.at >= dayStart.getTime());
+  const baseline = beforeToday ?? today[0];
+  const totalWh = history[history.length - 1]?.wh ?? wh;
+  if (!baseline || totalWh < baseline.wh) return null;
+  return {
+    kwh: Number(((totalWh - baseline.wh) / 1000).toFixed(3)),
+    caption: beforeToday ? "Орієнтовно від початку доби · локальна історія" : "Від першого вимірювання сьогодні"
+  };
+}
+
 
 export default function HomePage() {
   const [tab, setTab] = useState<Tab>("home");
@@ -30,6 +63,8 @@ export default function HomePage() {
   const [temperature, setTemperature] = useState(21);
   const [roomTemperature, setRoomTemperature] = useState<number | null>(null);
   const [energyConsumption, setEnergyConsumption] = useState<number | null>(null);
+  const [cumulativeEnergyKwh, setCumulativeEnergyKwh] = useState<number | null>(null);
+  const [observedTodayEnergy, setObservedTodayEnergy] = useState<EnergyEstimate | null>(null);
   const [energyDate, setEnergyDate] = useState<string | null>(null);
   const [energyDayKwh, setEnergyDayKwh] = useState<number | null>(null);
   const [energyNightKwh, setEnergyNightKwh] = useState<number | null>(null);
@@ -110,6 +145,11 @@ export default function HomePage() {
         if (pending && Date.now() >= pending.until) pendingControl.current = null;
         const room = Number(readValue(data?.telemetry?.roomTemperature));
         setRoomTemperature(Number.isFinite(room) ? room : null);
+        const cumulativeWh = Number(data?.telemetry?.cumulativeEnergyWh);
+        if (Number.isFinite(cumulativeWh) && cumulativeWh >= 0) {
+          setCumulativeEnergyKwh(cumulativeWh / 1000);
+          setObservedTodayEnergy(rememberEnergyReading(cumulativeWh));
+        }
         const dailyEnergy = data?.telemetry?.dailyEnergy;
         const energy = dailyEnergy?.available === true && dailyEnergy?.totalKwh !== null ? Number(dailyEnergy.totalKwh) : NaN;
         setEnergyConsumption(Number.isFinite(energy) ? energy : null);
@@ -265,9 +305,10 @@ export default function HomePage() {
 
         {tab === "energy" && <div className="subpage">
           <p className="eyebrow">ЕФЕКТИВНІСТЬ</p><h1>Енергія<span>.</span></h1>
-          <p className="subcopy">Показуємо добовий показник Atlantic, а не загальний накопичувальний лічильник пристрою.</p>
-          <div className="energy-card"><div className="energy-top"><div><span>СПОЖИВАННЯ ЗА ДОБУ</span><strong>{energyConsumption === null ? "—" : energyConsumption.toLocaleString("uk-UA")} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{energyDate ? "Дата показника: " + new Date(energyDate).toLocaleDateString("uk-UA") : "Atlantic поки не повернув добові дані для цієї установки."}</div></div>
-          <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>ПОГОДИННЕ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>{hourlyEnergy.length ? "Остання доба" : "—"}</strong></div><span className="muted-tag">{hourlyEnergy.length ? hourlyEnergy.length + " інтервалів" : "Немає даних"}</span></div>{hourlyEnergy.length ? <><div className="hourly-chart">{hourlyEnergy.map((item,index)=>{const max=Math.max(...hourlyEnergy.map(x=>x.quantityKwh),0.001);return <div className="hourly-column" key={item.timestamp}><div className="hourly-bar" title={item.quantityKwh.toLocaleString("uk-UA")+" кВт·год"} style={{height:Math.max(3,item.quantityKwh/max*100)+"%"}}/><small>{index%3===0?new Date(item.timestamp*1000).toLocaleTimeString("uk-UA",{hour:"2-digit"}):""}</small></div>})}</div><p className="hourly-note">Інтервали з відповіді Atlantic; статистика може надходити із затримкою.</p></> : <div className="empty-caption">Погодинна статистика поки недоступна від API Atlantic або ще не накопичена.</div>}</div>
+          <p className="subcopy">Лічильник конвектора показує накопичені Вт·год. Добові зміни рахуємо за його показами, збереженими на цьому пристрої.</p>
+          <div className="energy-card"><div className="energy-top"><div><span>НАКОПИЧЕНО ЛІЧИЛЬНИКОМ КОНВЕКТОРА</span><strong>{cumulativeEnergyKwh === null ? "—" : cumulativeEnergyKwh.toLocaleString("uk-UA",{minimumFractionDigits:1,maximumFractionDigits:1})} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{cumulativeEnergyKwh === null ? "Лічильник поки не передав значення." : "Загальний показник датчика Atlantic · " + Math.round(cumulativeEnergyKwh * 1000).toLocaleString("uk-UA") + " Вт·год"}</div></div>
+          <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>{observedTodayEnergy ? observedTodayEnergy.kwh.toLocaleString("uk-UA",{minimumFractionDigits:3,maximumFractionDigits:3}) : "—"} <small>кВт·год</small></strong></div><span className="muted-tag">Оцінка лічильника</span></div><div className="empty-caption">{observedTodayEnergy?.caption ?? "Зберемо початковий і наступний покази, щоб порахувати різницю."}</div>{energyConsumption !== null && <p className="hourly-note">Звіт Atlantic за добу: {energyConsumption.toLocaleString("uk-UA")} кВт·год{energyDate ? " · " + new Date(energyDate).toLocaleDateString("uk-UA") : ""}.</p>}</div>
+          <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>ПОГОДИННЕ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>{hourlyEnergy.length ? "Остання доба" : "—"}</strong></div><span className="muted-tag">{hourlyEnergy.length ? hourlyEnergy.length + " інтервалів" : "Немає даних"}</span></div>{hourlyEnergy.length ? <><div className="hourly-chart">{hourlyEnergy.map((item,index)=>{const max=Math.max(...hourlyEnergy.map(x=>x.quantityKwh),0.001);return <div className="hourly-column" key={item.timestamp}><div className="hourly-bar" title={item.quantityKwh.toLocaleString("uk-UA")+" кВт·год"} style={{height:Math.max(3,item.quantityKwh/max*100)+"%"}}/><small>{index%3===0?new Date(item.timestamp*1000).toLocaleTimeString("uk-UA",{hour:"2-digit"}):""}</small></div>})}</div><p className="hourly-note">Інтервали з відповіді Atlantic; статистика може надходити із затримкою.</p></> : <div className="empty-caption">Atlantic відхиляє погодинність hourly (код 43000006). Поки API не віддає ці інтервали, добову зміну рахуємо за лічильником конвектора.</div>}</div>
           <div className="energy-card" style={{marginTop:12}}>
             <div className="energy-top"><div><span>ВАРТІСТЬ ЗА ДОБУ</span><strong>{energyDayKwh !== null && energyNightKwh !== null ? (energyDayKwh * (new Date().getMonth() >= 9 || new Date().getMonth() <= 3 ? (winterTier === "discount" ? 2.64 : 4.32) : 4.32) + energyNightKwh * (new Date().getMonth() >= 9 || new Date().getMonth() <= 3 ? (winterTier === "discount" ? 1.32 : 2.16) : 2.16)).toLocaleString("uk-UA",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"} <small>грн</small></strong></div><div className="metric-icon mint"><Zap size={18}/></div></div>
             <div className="tariff-breakdown">
@@ -281,18 +322,14 @@ export default function HomePage() {
             </div>
             <p className="hourly-note">Тарифи: день 4,32 / ніч 2,16 грн; у сезон 1 жовтня — 30 квітня пільговий день 2,64 / ніч 1,32 грн. Перемикай «Понад ліміт», якщо загальне споживання квартири за місяць перевищило 2000 кВт·год. Вартість орієнтовна: Cozytouch може показувати споживання всієї установки, а не лише конвектора.</p>
           </div>
-          <div className="energy-card" style={{marginTop:12}}>
-            <div className="energy-top"><div><span>ПОТУЖНІСТЬ ЗА ОСТАННЮ ГОДИНУ</span><strong style={{fontSize:24}}>{hourlyEnergy.length ? Math.round(hourlyEnergy[hourlyEnergy.length-1].quantityKwh*1000).toLocaleString("uk-UA")+" Вт" : "—"}</strong></div><span className="muted-tag">Середня</span></div>
-            <p className="hourly-note">Оцінка середньої потужності за останній погодинний інтервал: кВт·год × 1000. Це не миттєве вимірювання і не показник лише конвектора, якщо в Cozytouch є інші пристрої.</p>
-          </div>
-          <div className="metric-card tariff"><span>Джерело показника</span><strong>{energyConsumption === null ? "Недоступно" : "Atlantic Cozytouch"}</strong><small>Добовий і погодинний показники — для всієї установки Cozytouch. Миттєва потужність показується окремо лише за наявності відповідного датчика.</small></div>
-          {energyDiagnostics && <div className="energy-card" style={{marginTop:12}}>
-            <div className="energy-top"><div><span>ДІАГНОСТИКА COZYTOUCH</span><strong style={{fontSize:18}}>Що повертає система</strong></div><span className="muted-tag">{energyDiagnostics.devices?.length ?? 0} датчиків</span></div>
+          <div className="metric-card tariff"><span>Миттєва потужність</span><strong>{instantaneousPowerW === null ? "Поки недоступна" : instantaneousPowerW.toLocaleString("uk-UA") + " Вт"}</strong><small>Зараз датчик Cozytouch передає накопичену енергію, але не миттєві Вт. Середню потужність без погодинних даних не підміняємо здогадом.</small></div>
+          {energyDiagnostics && <details className="energy-card energy-diagnostics" style={{marginTop:12}}>
+            <summary>Технічна діагностика Cozytouch · {energyDiagnostics.devices?.length ?? 0} датчиків</summary>
             <div className="empty-caption">Добові дані: {energyDiagnostics.dailyErrorCode || (energyDiagnostics.daily ? "серій: "+energyDiagnostics.daily.seriesCount+" · періодів: "+energyDiagnostics.daily.parsedPeriods : "без помилки")}</div>
             <div className="empty-caption">Погодинні дані: {energyDiagnostics.hourlyErrorCode || (energyDiagnostics.hourly ? "серій: "+energyDiagnostics.hourly.seriesCount+" · періодів: "+energyDiagnostics.hourly.parsedPeriods : "без помилки")}</div>
             {energyDiagnostics.hourlyErrorDetails ? <div className="empty-caption" style={{overflowWrap:"anywhere",whiteSpace:"normal"}}>Відповідь Atlantic: {energyDiagnostics.hourlyErrorDetails}</div> : null}
-            {energyDiagnostics.devices?.map((device,index)=><div className="diagnostic-row" key={index}><strong>{device.name}</strong><small>{device.model}</small><small>Поля: {device.states.join(", ") || "не описані"}</small><small>Значення: {device.readings.map(reading=>String(reading.name)+"="+String(reading.value)).join(" · ") || "поки немає"}</small></div>)}
-          </div>}
+            {energyDiagnostics.devices?.map((device,index)=><div className="diagnostic-row" key={index}><strong>{device.name}</strong><small>{device.model}</small><small>Поля: {device.states.join(", ") || "не описані"}</small><small>Значення: {device.readings.map(reading=>String(reading.name)+"="+(reading.value && typeof reading.value === "object" ? JSON.stringify(reading.value) : String(reading.value))).join(" · ") || "поки немає"}</small></div>)}
+          </details>}
         </div>}
 
         {tab === "settings" && <div className="subpage">
