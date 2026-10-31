@@ -7,9 +7,9 @@
 - Керування живленням, цільовою температурою та режимом роботи.
 - Перевірка шлюзу й конвектора, автоматичне виявлення відновлення зв'язку після офлайн-стану.
 - Оновлення стану приблизно кожні 30 секунд.
-- Добове та погодинне споживання, якщо Atlantic API повертає ці інтервали.
-- Розрахунок вартості добового споживання за тарифом, який задає користувач (зберігається локально в браузері).
-- Орієнтовна середня потужність за останній погодинний інтервал на основі кВт·год; це не миттєве вимірювання.
+- Накопичений лічильник енергії, локальна добова оцінка та хмарна історія показів для графіка за 7/30 днів.
+- Орієнтовна вартість за введеним користувачем тарифом.
+- Погодинні дані показуються, якщо Atlantic API повертає ці інтервали.
 - Миттєва потужність у W показується лише якщо пристрій повертає окремий стан потужності з однозначною одиницею виміру.
 - Розклад не активовано: годинник конвектора може скидатися під час знеструмлення.
 
@@ -18,6 +18,9 @@
 Обов'язково задай у Vercel → Project → Settings → Environment Variables:
 - `SESSION_PASSWORD` — випадковий секрет не коротше 32 символів. Використовується для шифрування HttpOnly-сесії.
 - `ATLANTIC_APP_PASSWORD` — окремий пароль доступу до вебзастосунку, не коротше 4 символів.
+- `DATABASE_URL` — рядок підключення Neon Postgres; потрібен для хмарної історії енергоспоживання, але не для керування конвектором.
+
+Для `DATABASE_URL` підключи Neon у Vercel Marketplace до проєкту. Після додавання змінної виконай Redeploy. Таблиця історії створюється застосунком автоматично; покази збираються, коли сторінка Atlantic Home відкрита та отримує телеметрію.
 
 Додай обидві змінні для Production (і Preview, якщо ним користуєшся), потім виконай Redeploy. Не використовуй один і той самий пароль для Cozytouch, SESSION_PASSWORD та ATLANTIC_APP_PASSWORD. Не надсилай ці значення в чат і не додавай їх до Git.
 
@@ -58,8 +61,6 @@ npm run dev
 ## Обмеження телеметрії
 Добова й погодинна статистика отримується для всієї установки Cozytouch, а не гарантовано лише для конвектора. Погодинні дані можуть бути недоступні залежно від відповіді Atlantic API. Миттєві W не розраховуються з припущень: без явного стану потужності з одиницею W/kW інтерфейс покаже «—».
 
-## Electricity tariff estimate
+## Energy history
 
-The Energy tab uses Cozytouch daily peak/off-peak consumption when both tariff-zone values are available. It estimates cost with the Ukrainian two-zone schedule: day 07:00–23:00 and night 23:00–07:00. From October through April, the default winter benefit estimate is UAH 2.64/kWh day and UAH 1.32/kWh night up to 2,000 kWh/month; the alternate “Понад ліміт” option uses UAH 4.32/kWh day and UAH 2.16/kWh night. From May through September, standard rates apply. The winter tier choice is stored in the current browser.
-
-The 2,000 kWh threshold is a household monthly threshold, while Cozytouch data can cover only the connected setup. The user must switch to “Понад ліміт” once total household monthly consumption exceeds the threshold. Cost is an estimate, not a utility-bill statement; if Cozytouch does not provide separate day/night values, cost remains unavailable rather than being guessed.
+Energy readings are sampled at fifteen-minute buckets while the app is receiving Cozytouch telemetry. The cumulative counter is the heater sensor reading; daily values are calculated from its deltas. The chart and cost are estimates. Cost uses the tariff entered in the Energy tab, saved locally in that browser. Without `DATABASE_URL`, only the local estimate is available and readings cannot sync across browsers.

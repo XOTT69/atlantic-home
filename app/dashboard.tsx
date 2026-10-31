@@ -25,7 +25,37 @@ type EnergyDiagnostics = {
 
 type EnergySnapshot = { at: number; wh: number };
 type EnergyEstimate = { kwh: number; caption: string };
+type EnergyHistorySample = { sampledAt: number; cumulativeEnergyWh: number };
 const ENERGY_SNAPSHOT_KEY = "atlantic-home-energy-snapshots-v1";
+const ENERGY_RATE_KEY = "atlantic-home-electricity-rate";
+
+function localDateKey(at: number) {
+  const date = new Date(at);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function dailyEnergySeries(samples: EnergyHistorySample[], days: number, now: number) {
+  const totals = new Map<string, number>();
+  const ordered = [...samples].sort((a, b) => a.sampledAt - b.sampledAt);
+  for (let index = 1; index < ordered.length; index++) {
+    const previous = ordered[index - 1];
+    const current = ordered[index];
+    const deltaWh = current.cumulativeEnergyWh - previous.cumulativeEnergyWh;
+    if (!Number.isFinite(deltaWh) || deltaWh < 0) continue;
+    const key = localDateKey(current.sampledAt);
+    totals.set(key, (totals.get(key) ?? 0) + deltaWh / 1000);
+  }
+  const result = [];
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    const key = localDateKey(date.getTime());
+    result.push({ key, label: date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" }), kwh: totals.get(key) ?? 0 });
+  }
+  return result;
+}
 
 function rememberEnergyReading(wh: number, now = Date.now()): EnergyEstimate | null {
   if (!Number.isFinite(wh) || wh < 0) return null;
@@ -65,11 +95,13 @@ export default function HomePage() {
   const [energyConsumption, setEnergyConsumption] = useState<number | null>(null);
   const [cumulativeEnergyKwh, setCumulativeEnergyKwh] = useState<number | null>(null);
   const [observedTodayEnergy, setObservedTodayEnergy] = useState<EnergyEstimate | null>(null);
+  const [energyHistoryId, setEnergyHistoryId] = useState<string | null>(null);
+  const [energyStorage, setEnergyStorage] = useState<"ready" | "not_configured" | "error">("not_configured");
+  const [energyHistory, setEnergyHistory] = useState<EnergyHistorySample[]>([]);
+  const [energyChartDays, setEnergyChartDays] = useState<7 | 30>(7);
+  const [electricityRate, setElectricityRate] = useState("");
+  const [rateReady, setRateReady] = useState(false);
   const [energyDate, setEnergyDate] = useState<string | null>(null);
-  const [energyDayKwh, setEnergyDayKwh] = useState<number | null>(null);
-  const [energyNightKwh, setEnergyNightKwh] = useState<number | null>(null);
-  const [winterTier, setWinterTier] = useState<"discount" | "standard">("discount");
-  const [winterTierReady, setWinterTierReady] = useState(false);
   const [hourlyEnergy, setHourlyEnergy] = useState<{timestamp:number;quantityKwh:number;mode:number}[]>([]);
   const [instantaneousPowerW, setInstantaneousPowerW] = useState<number | null>(null);
   const [energyDiagnostics, setEnergyDiagnostics] = useState<EnergyDiagnostics | null>(null);
@@ -90,15 +122,14 @@ export default function HomePage() {
   const gatewayWasOffline = useRef(false);
   const pendingControl = useRef<{action:string;value:unknown;until:number}|null>(null);
   useEffect(() => {
-    const saved = window.localStorage.getItem("atlantic-home-winter-tier");
-    // Read persisted preference after hydration so server and client first renders match.
+    const savedRate = window.localStorage.getItem(ENERGY_RATE_KEY);
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved === "discount" || saved === "standard") setWinterTier(saved);
-    setWinterTierReady(true);
+    if (savedRate) setElectricityRate(savedRate);
+    setRateReady(true);
   }, []);
   useEffect(() => {
-    if (winterTierReady) window.localStorage.setItem("atlantic-home-winter-tier", winterTier);
-  }, [winterTier, winterTierReady]);
+    if (rateReady) window.localStorage.setItem(ENERGY_RATE_KEY, electricityRate);
+  }, [electricityRate, rateReady]);
   useEffect(() => {
     let active = true;
     const readValue = (value: unknown) => {
@@ -150,12 +181,12 @@ export default function HomePage() {
           setCumulativeEnergyKwh(cumulativeWh / 1000);
           setObservedTodayEnergy(rememberEnergyReading(cumulativeWh));
         }
+        setEnergyHistoryId(typeof data?.telemetry?.energyHistoryId === "string" ? data.telemetry.energyHistoryId : null);
+        setEnergyStorage(data?.telemetry?.energyStorage === "ready" ? "ready" : data?.telemetry?.energyStorage === "error" ? "error" : "not_configured");
         const dailyEnergy = data?.telemetry?.dailyEnergy;
         const energy = dailyEnergy?.available === true && dailyEnergy?.totalKwh !== null ? Number(dailyEnergy.totalKwh) : NaN;
         setEnergyConsumption(Number.isFinite(energy) ? energy : null);
         setEnergyDate(dailyEnergy?.date ?? null);
-        setEnergyDayKwh(typeof dailyEnergy?.peakKwh === "number" ? dailyEnergy.peakKwh : null);
-        setEnergyNightKwh(typeof dailyEnergy?.offPeakKwh === "number" ? dailyEnergy.offPeakKwh : null);
         const hourly = data?.telemetry?.hourlyEnergy;
         setHourlyEnergy(hourly?.available === true && Array.isArray(hourly.periods) ? hourly.periods : []);
         const powerW = data?.telemetry?.instantaneousPowerW;
@@ -177,6 +208,23 @@ export default function HomePage() {
     const interval = window.setInterval(refresh, 30000);
     return () => { active = false; window.clearInterval(interval); };
   }, [refreshTick]);
+
+  useEffect(() => {
+    if (!energyHistoryId || energyStorage !== "ready") return;
+    let active = true;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`/api/cozytouch/energy?installationId=${encodeURIComponent(energyHistoryId)}`, {
+          cache: "no-store", credentials: "same-origin"
+        });
+        const data = await response.json();
+        if (active && response.ok && data.configured && Array.isArray(data.samples)) setEnergyHistory(data.samples);
+      } catch { /* The live meter and last loaded chart remain usable offline. */ }
+    };
+    loadHistory();
+    const interval = window.setInterval(loadHistory, 5 * 60_000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [energyHistoryId, energyStorage]);
 
   async function sendControl(action: string, value: unknown) {
     if (controlBusy) return;
@@ -212,6 +260,18 @@ export default function HomePage() {
     }
   }
 
+  const chartNow = lastUpdatedAt ? Date.parse(lastUpdatedAt) : (energyHistory[energyHistory.length - 1]?.sampledAt ?? 0);
+  const energyDailySeries = dailyEnergySeries(energyHistory, energyChartDays, chartNow);
+  const todayKey = localDateKey(chartNow);
+  const todayHistoryKwh = energyDailySeries.find(day => day.key === todayKey)?.kwh ?? 0;
+  const todayEnergyEstimate = energyStorage === "ready" && energyHistory.length > 1
+    ? { kwh: todayHistoryKwh, caption: "Різниця накопиченого лічильника · історія у хмарі" }
+    : observedTodayEnergy;
+  const energyRate = Number(electricityRate.trim().replace(",", "."));
+  const rateIsValid = Number.isFinite(energyRate) && energyRate > 0;
+  const chartEnergyKwh = energyDailySeries.reduce((sum, day) => sum + day.kwh, 0);
+  const chartCost = rateIsValid && energyHistory.length > 1 ? chartEnergyKwh * energyRate : null;
+  const chartMaxKwh = Math.max(...energyDailySeries.map(day => day.kwh), 0.001);
 
   return (
     <main className="app-shell">
@@ -305,22 +365,22 @@ export default function HomePage() {
 
         {tab === "energy" && <div className="subpage">
           <p className="eyebrow">ЕФЕКТИВНІСТЬ</p><h1>Енергія<span>.</span></h1>
-          <p className="subcopy">Лічильник конвектора показує накопичені Вт·год. Добові зміни рахуємо за його показами, збереженими на цьому пристрої.</p>
+          <p className="subcopy">Лічильник конвектора показує накопичені Вт·год. Поки застосунок отримує телеметрію, зберігаємо показ кожні п’ятнадцять хвилин.</p>
           <div className="energy-card"><div className="energy-top"><div><span>НАКОПИЧЕНО ЛІЧИЛЬНИКОМ КОНВЕКТОРА</span><strong>{cumulativeEnergyKwh === null ? "—" : cumulativeEnergyKwh.toLocaleString("uk-UA",{minimumFractionDigits:1,maximumFractionDigits:1})} <small>кВт·год</small></strong></div><div className="metric-icon amber"><Zap size={18}/></div></div><div className="empty-caption">{cumulativeEnergyKwh === null ? "Лічильник поки не передав значення." : "Загальний показник датчика Atlantic · " + Math.round(cumulativeEnergyKwh * 1000).toLocaleString("uk-UA") + " Вт·год"}</div></div>
-          <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>{observedTodayEnergy ? observedTodayEnergy.kwh.toLocaleString("uk-UA",{minimumFractionDigits:3,maximumFractionDigits:3}) : "—"} <small>кВт·год</small></strong></div><span className="muted-tag">Оцінка лічильника</span></div><div className="empty-caption">{observedTodayEnergy?.caption ?? "Зберемо початковий і наступний покази, щоб порахувати різницю."}</div>{energyConsumption !== null && <p className="hourly-note">Звіт Atlantic за добу: {energyConsumption.toLocaleString("uk-UA")} кВт·год{energyDate ? " · " + new Date(energyDate).toLocaleDateString("uk-UA") : ""}.</p>}</div>
+          <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>СПОЖИВАННЯ СЬОГОДНІ</span><strong>{todayEnergyEstimate ? todayEnergyEstimate.kwh.toLocaleString("uk-UA",{minimumFractionDigits:3,maximumFractionDigits:3}) : "—"} <small>кВт·год</small></strong></div><span className="muted-tag">Оцінка лічильника</span></div><div className="empty-caption">{todayEnergyEstimate?.caption ?? "Потрібно щонайменше два збережені покази лічильника."}</div>{energyConsumption !== null && <p className="hourly-note">Звіт Atlantic за добу: {energyConsumption.toLocaleString("uk-UA")} кВт·год{energyDate ? " · " + new Date(energyDate).toLocaleDateString("uk-UA") : ""}.</p>}</div>
+          <div className="energy-card" style={{marginTop:12}}>
+            <div className="energy-top"><div><span>ІСТОРІЯ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>За {energyChartDays} днів</strong></div><span className="muted-tag">{energyHistory.length} показів</span></div>
+            <div className="energy-period-choice"><button className={energyChartDays === 7 ? "selected" : ""} onClick={()=>setEnergyChartDays(7)}>7 днів</button><button className={energyChartDays === 30 ? "selected" : ""} onClick={()=>setEnergyChartDays(30)}>30 днів</button></div>
+            {energyHistory.length > 1 ? <div className="energy-history-chart" aria-label={`Споживання за ${energyChartDays} днів`}>
+              {energyDailySeries.map(day=><div className="energy-history-column" key={day.key} title={`${day.key}: ${day.kwh.toLocaleString("uk-UA",{maximumFractionDigits:3})} кВт·год`}><div style={{height:`${day.kwh > 0 ? Math.max(4, day.kwh / chartMaxKwh * 100) : 1}%`}}/><small>{day.label}</small></div>)}
+            </div> : <div className="empty-caption">Збираємо покази. Графік з’явиться після наступного зчитування.</div>}
+            <p className="hourly-note">{energyStorage === "ready" ? "Хмарна історія активна; дані доступні на різних пристроях. Якщо застосунок був закритий, зміна між показами потрапить до дня наступного зчитування." : energyStorage === "error" ? "Не вдалося зберегти показ. Перевір підключення бази Neon." : "Хмарну історію ще не підключено. Поки покази зберігаються лише в цьому браузері."}</p>
+          </div>
           <div className="energy-card" style={{marginTop:12}}><div className="energy-top"><div><span>ПОГОДИННЕ СПОЖИВАННЯ</span><strong style={{fontSize:20}}>{hourlyEnergy.length ? "Остання доба" : "—"}</strong></div><span className="muted-tag">{hourlyEnergy.length ? hourlyEnergy.length + " інтервалів" : "Немає даних"}</span></div>{hourlyEnergy.length ? <><div className="hourly-chart">{hourlyEnergy.map((item,index)=>{const max=Math.max(...hourlyEnergy.map(x=>x.quantityKwh),0.001);return <div className="hourly-column" key={item.timestamp}><div className="hourly-bar" title={item.quantityKwh.toLocaleString("uk-UA")+" кВт·год"} style={{height:Math.max(3,item.quantityKwh/max*100)+"%"}}/><small>{index%3===0?new Date(item.timestamp*1000).toLocaleTimeString("uk-UA",{hour:"2-digit"}):""}</small></div>})}</div><p className="hourly-note">Інтервали з відповіді Atlantic; статистика може надходити із затримкою.</p></> : <div className="empty-caption">Atlantic відхиляє погодинність hourly (код 43000006). Поки API не віддає ці інтервали, добову зміну рахуємо за лічильником конвектора.</div>}</div>
           <div className="energy-card" style={{marginTop:12}}>
-            <div className="energy-top"><div><span>ВАРТІСТЬ ЗА ДОБУ</span><strong>{energyDayKwh !== null && energyNightKwh !== null ? (energyDayKwh * (new Date().getMonth() >= 9 || new Date().getMonth() <= 3 ? (winterTier === "discount" ? 2.64 : 4.32) : 4.32) + energyNightKwh * (new Date().getMonth() >= 9 || new Date().getMonth() <= 3 ? (winterTier === "discount" ? 1.32 : 2.16) : 2.16)).toLocaleString("uk-UA",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"} <small>грн</small></strong></div><div className="metric-icon mint"><Zap size={18}/></div></div>
-            <div className="tariff-breakdown">
-              <div><span>День · 07:00–23:00</span><strong>{energyDayKwh === null ? "—" : energyDayKwh.toLocaleString("uk-UA")} кВт·год</strong></div>
-              <div><span>Ніч · 23:00–07:00</span><strong>{energyNightKwh === null ? "—" : energyNightKwh.toLocaleString("uk-UA")} кВт·год</strong></div>
-            </div>
-            <div className="tariff-choice">
-              <span>Зимовий тариф · до 2000 кВт·год/міс.</span>
-              <button type="button" className={winterTier === "discount" ? "selected" : ""} onClick={()=>setWinterTier("discount")}>Пільговий</button>
-              <button type="button" className={winterTier === "standard" ? "selected" : ""} onClick={()=>setWinterTier("standard")}>Понад ліміт</button>
-            </div>
-            <p className="hourly-note">Тарифи: день 4,32 / ніч 2,16 грн; у сезон 1 жовтня — 30 квітня пільговий день 2,64 / ніч 1,32 грн. Перемикай «Понад ліміт», якщо загальне споживання квартири за місяць перевищило 2000 кВт·год. Вартість орієнтовна: Cozytouch може показувати споживання всієї установки, а не лише конвектора.</p>
+            <div className="energy-top"><div><span>ОРІЄНТОВНА ВАРТІСТЬ ЗА ПЕРІОД</span><strong>{chartCost === null ? "—" : chartCost.toLocaleString("uk-UA",{minimumFractionDigits:2,maximumFractionDigits:2})} <small>грн</small></strong></div><div className="metric-icon mint"><Zap size={18}/></div></div>
+            <label className="tariff-input-label">Твій тариф, грн за кВт·год<input inputMode="decimal" type="text" placeholder="Наприклад, 4,32" value={electricityRate} onChange={event=>setElectricityRate(event.target.value)}/></label>
+            <p className="hourly-note">За вибрані {energyChartDays} днів: {chartEnergyKwh.toLocaleString("uk-UA",{minimumFractionDigits:3,maximumFractionDigits:3})} кВт·год. Введи тариф зі свого рахунку. Це оцінка для конвектора за показами його лічильника.</p>
           </div>
           <div className="metric-card tariff"><span>Миттєва потужність</span><strong>{instantaneousPowerW === null ? "Поки недоступна" : instantaneousPowerW.toLocaleString("uk-UA") + " Вт"}</strong><small>Зараз датчик Cozytouch передає накопичену енергію, але не миттєві Вт. Середню потужність без погодинних даних не підміняємо здогадом.</small></div>
           {energyDiagnostics && <details className="energy-card energy-diagnostics" style={{marginTop:12}}>

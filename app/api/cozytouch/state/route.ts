@@ -1,6 +1,7 @@
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { withOverkiz, findAtlanticHeater, getDeviceStates, normalizeStates, getDailySetupConsumption, getHourlySetupConsumption, readInstantPowerW } from "@/lib/overkiz";
+import { saveEnergySample } from "@/lib/energy-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +61,18 @@ export async function GET() {
         const value = stateByUrl.get(url)?.states?.[key];
         return value === undefined ? null : value;
       };
+      let energyHistoryId: string | null = null;
+      let energyStorage: "ready" | "not_configured" | "error" = "not_configured";
+      try {
+        const stored = await saveEnergySample(
+          typeof energySensor?.deviceURL === "string" ? energySensor.deviceURL : null,
+          sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption")
+        );
+        energyHistoryId = stored.installationId;
+        energyStorage = stored.configured ? "ready" : "not_configured";
+      } catch {
+        energyStorage = "error";
+      }
       return NextResponse.json({
         connected: true, source: "cozytouch-legacy", updatedAt: new Date().toISOString(), gatewayOnline,
         gatewayStatus: gatewayOnline ? "online" : "offline",
@@ -79,6 +92,8 @@ export async function GET() {
           roomTemperatureStatus: gatewayOnline && stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? "online" : "unknown",
           roomTemperatureLastSuccessAt: gatewayOnline && stateByUrl.get(temperatureSensor?.deviceURL)?.readOk ? new Date().toISOString() : null,
           cumulativeEnergyWh: sensorValue(energySensor?.deviceURL, "ElectricEnergyConsumption"),
+          energyHistoryId,
+          energyStorage,
           dailyEnergy: dailyEnergyResult,
           hourlyEnergy: hourlyEnergyResult,
           instantaneousPowerW: readInstantPowerW([
