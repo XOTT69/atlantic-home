@@ -1,3 +1,4 @@
+import { allowLogin } from "@/lib/login-limit";
 import { hasAppAccess } from "@/lib/access";
 import { NextResponse } from "next/server";
 import { attachCozytouchSessionCookie, getCozytouchSession } from "@/lib/session";
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Недозволене джерело запиту." }, { status: 403 });
   }
   try {
+    if (!await allowLogin(request, "cozytouch-connect")) return NextResponse.json({ error: "Забагато спроб підключення. Повтори через 10 хвилин." }, { status: 429, headers: { "Retry-After": "600" } });
     stage = "session_config";
     const contentType = request.headers.get("content-type") ?? "";
     let body: { email?: unknown; password?: unknown };
@@ -90,13 +92,7 @@ export async function POST(request: Request) {
 
     // Read-only cross-checks: setupviewv2 can be empty while other account
     // collections may reveal whether this API client can see the installation.
-    const probePaths = [
-      "/magellan/devices",
-      "/magellan/setups",
-      "/magellan/gateways",
-      "/magellan/zones",
-      "/magellan/cozytouch/setupview"
-    ];
+    const probePaths: string[] = [];
     const probeResults = await Promise.all(probePaths.map(async path => {
       try {
         const response = await fetch(API + path, {

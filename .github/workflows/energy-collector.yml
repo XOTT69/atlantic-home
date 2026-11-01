@@ -28,6 +28,6 @@ jobs:
             echo "Set the CRON_SECRET repository secret."
             exit 0
           fi
-          curl --fail-with-body --silent --show-error --max-time 55 \
+          curl --fail-with-body --silent --show-error --max-time 60 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${ATLANTIC_HOME_URL%/}/api/cron/energy"

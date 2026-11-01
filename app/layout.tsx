@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import "./light-theme.css";
-import "./design-system.css";
 import ServiceWorkerRegister from "./sw-register";
 
 export const metadata: Metadata = {
@@ -23,7 +21,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#f4f8fc"
+  themeColor: "#f4f7fb"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

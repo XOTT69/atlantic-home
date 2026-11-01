@@ -1,13 +1,29 @@
-// Atlantic Home: keep API requests and app assets network-managed by Next.js.
-// Do not cache HTML or hashed chunks: stale PWA shells can break React hydration.
-self.addEventListener("install", event => {
-  event.waitUntil(self.skipWaiting());
+const CACHE = "atlantic-offline-v2";
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.add("/offline.html")),
+  );
 });
-
-self.addEventListener("activate", event => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.map(key => caches.delete(key)));
-    await self.clients.claim();
-  })());
+self.addEventListener("message", (event) => {
+  if (event.data === "ACTIVATE_UPDATE") self.skipWaiting();
+});
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      for (const key of await caches.keys())
+        if (key.startsWith("atlantic-offline-") && key !== CACHE)
+          await caches.delete(key);
+      await self.clients.claim();
+    })(),
+  );
+});
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate" || event.request.method !== "GET")
+    return;
+  // Never cache authenticated HTML, API responses or commands.
+  event.respondWith(
+    fetch(event.request).catch(async () =>
+      (await caches.open(CACHE)).match("/offline.html"),
+    ),
+  );
 });

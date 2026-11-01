@@ -9,7 +9,7 @@ export const maxDuration = 60;
 function authorized(request: Request) {
   const expected = process.env.CRON_SECRET;
   const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!expected || expected.length < 32 || provided.length !== expected.length) return false;
+  if (!expected || expected.length < 32 || Buffer.byteLength(provided) !== Buffer.byteLength(expected)) return false;
   return timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
 }
 

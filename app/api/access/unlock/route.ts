@@ -1,3 +1,4 @@
+import { allowLogin } from "@/lib/login-limit";
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { attachCozytouchSessionCookie, getCozytouchSession, getSessionConfigurationError } from "@/lib/session";
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Захищений вхід не налаштований: ${sessionConfigurationError} Перевір змінні середовища у Vercel і зроби Redeploy.` }, { status: 503 });
   }
   try {
+    if (!await allowLogin(request, "app-unlock")) return NextResponse.json({ error: "Забагато спроб. Повтори вхід через 10 хвилин." }, { status: 429, headers: { "Retry-After": "600" } });
     const body = await request.json() as { password?: unknown };
     const supplied = typeof body.password === "string" ? body.password : "";
     const a = Buffer.from(supplied);
