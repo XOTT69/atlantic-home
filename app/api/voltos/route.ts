@@ -8,6 +8,7 @@ import {
   executeHeaterCommand,
 } from "@/lib/overkiz";
 import { getProviderToken } from "@/lib/provider-auth";
+import { allowLogin } from "@/lib/login-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,7 +68,16 @@ export async function GET(request:Request){
 export async function POST(request:Request){
  if(!allowed(request))return NextResponse.json({error:"Unauthorized"},{status:401,headers});
  try{
-  const body=await request.json() as {action?:unknown;value?:unknown};
+  const body=await request.json() as {action?:unknown;value?:unknown;password?:unknown};
+  if(body.action==="verifyAccess"){
+   if(!await allowLogin(request,"voltos-access-verify"))return NextResponse.json({error:"Забагато спроб входу"},{status:429,headers});
+   const expected=process.env.ATLANTIC_APP_PASSWORD??"";
+   const supplied=typeof body.password==="string"?body.password:"";
+   const isValid=expected.length>=4&&supplied.length<=256&&
+     timingSafeEqual(createHash("sha256").update(expected).digest(),createHash("sha256").update(supplied).digest())&&
+     supplied.length===expected.length;
+   return NextResponse.json({verified:isValid},{status:isValid?200:401,headers});
+  }
   let command:string;let parameters:unknown[]=[];
   if(body.action==="power"&&typeof body.value==="boolean")command=body.value?"on":"off";
   else if(body.action==="temperature"){
